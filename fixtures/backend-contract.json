@@ -1,4 +1,14 @@
 {
   "apiVersion": "v1",
-  "description": "NocIQ backend API contract fixture — used by the release gate."
+  "description": "NocIQ backend API contract fixture — used by the release gate and contract drift tests.",
+  "endpoints": {
+    "/api/v1/outages": {
+      "response": {
+        "id": { "type": "string", "required": true },
+        "site_name": { "type": "string", "required": true },
+        "severity": { "type": "string", "required": true },
+        "resolved_at": { "type": "string", "required": false }
+      }
+    }
+  }
 }
