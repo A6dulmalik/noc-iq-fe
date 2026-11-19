@@ -1,8 +1,14 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  type RefObject,
+} from 'react';
 import { useRouter } from 'next/navigation';
-import { api, getAccessToken, setTokens } from '@/lib/api';
+import { api, setTokens } from '@/lib/api';
 
 interface PendingMutation {
   id: string;
@@ -19,10 +25,48 @@ interface SessionExpiryModalProps {
 
 export default function SessionExpiryModal({
   isOpen,
+  ...dialogProps
+}: SessionExpiryModalProps) {
+  const emailInputRef = useRef<HTMLInputElement>(null);
+  const wasOpenRef = useRef(false);
+  const focusBeforeOpenRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (isOpen && !wasOpenRef.current) {
+      const activeElement = document.activeElement;
+      focusBeforeOpenRef.current =
+        activeElement instanceof HTMLElement && activeElement !== document.body
+          ? activeElement
+          : null;
+      emailInputRef.current?.focus();
+    } else if (!isOpen && wasOpenRef.current) {
+      const focusTarget = focusBeforeOpenRef.current;
+      const fallback = document.getElementById('main-content');
+      if (focusTarget?.isConnected) {
+        focusTarget.focus();
+      } else if (fallback instanceof HTMLElement) {
+        // The app main landmark is the fallback when the invoking control is gone.
+        fallback.focus();
+      }
+      focusBeforeOpenRef.current = null;
+    }
+
+    wasOpenRef.current = isOpen;
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  return <SessionExpiryDialog {...dialogProps} emailInputRef={emailInputRef} />;
+}
+
+function SessionExpiryDialog({
   pendingMutations,
   onReauthenticated,
   onDismiss,
-}: SessionExpiryModalProps) {
+  emailInputRef,
+}: Omit<SessionExpiryModalProps, 'isOpen'> & {
+  emailInputRef: RefObject<HTMLInputElement | null>;
+}) {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -64,18 +108,6 @@ export default function SessionExpiryModal({
       setLoading(false);
     }
   }, [email, password, pendingMutations, onReauthenticated, onDismiss]);
-
-  // Reset on open
-  useEffect(() => {
-    if (isOpen) {
-      submittedRef.current = false;
-      setEmail('');
-      setPassword('');
-      setError(null);
-    }
-  }, [isOpen]);
-
-  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/40">
@@ -138,6 +170,7 @@ export default function SessionExpiryModal({
               Email
             </label>
             <input
+              ref={emailInputRef}
               id="reauth-email"
               type="email"
               value={email}

@@ -2,6 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactNode, useState } from 'react';
+import { shouldRetryQuery } from '@/lib/queryRecovery';
 
 export function ReactQueryProvider({ children }: { children: ReactNode }) {
   const [client] = useState(
@@ -12,7 +13,7 @@ export function ReactQueryProvider({ children }: { children: ReactNode }) {
             staleTime: 30_000,
             gcTime: 5 * 60_000,
             refetchOnWindowFocus: false,
-            retry: 2,
+            retry: shouldRetryQuery,
             // React Query v5 uses AbortController for cancellation by default.
             // Queries are aborted when the component unmounts or the query key changes.
           },
