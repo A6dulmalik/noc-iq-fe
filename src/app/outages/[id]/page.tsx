@@ -17,6 +17,12 @@ import {
 } from '@/components/ui/route-state';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/components/ui/toast';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { announce } from '@/hooks/useOutageRealtime';
 import { formatTimestampWithTimeZone } from '@/lib/time';
 import {
@@ -271,6 +277,7 @@ export default function OutageDetailsPage() {
   const timeline = buildTimeline(outage);
 
   return (
+    <TooltipProvider>
     <div className="container mx-auto max-w-4xl space-y-6 px-4 py-8">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div className="flex items-center gap-3">
@@ -831,5 +838,6 @@ export default function OutageDetailsPage() {
         </div>
       )}
     </div>
+    </TooltipProvider>
   );
 }

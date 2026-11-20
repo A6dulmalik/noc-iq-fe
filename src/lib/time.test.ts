@@ -33,33 +33,52 @@ describe('time formatting (#973)', () => {
   });
 
   describe('formatRelativeTime', () => {
-    const rel = (iso: string) => formatRelativeTime(iso, { now, locale: 'en' });
+    const rel = (iso: string) =>
+      formatRelativeTime(iso, { now, locale: 'en-US', timeZone: 'UTC' });
 
     it('renders recent timestamps as "just now"', () => {
       expect(rel('2026-10-19T11:59:45.000Z')).toBe('just now');
     });
 
-    it('renders past timestamps with "ago" across units', () => {
-      expect(rel('2026-10-19T11:55:00.000Z')).toBe('5 minutes ago');
-      expect(rel('2026-10-19T09:00:00.000Z')).toBe('3 hours ago');
-      expect(rel('2026-10-16T12:00:00.000Z')).toBe('3 days ago');
-      expect(rel('2026-10-05T12:00:00.000Z')).toBe('2 weeks ago');
+    it('renders past timestamps as relative labels across boundaries (#893)', () => {
+      expect(rel('2026-10-19T11:59:16.000Z')).toBe('just now'); // 44s
+      expect(rel('2026-10-19T11:59:14.000Z')).toBe('1m ago'); // 46s
+      expect(rel('2026-10-19T11:55:00.000Z')).toBe('5m ago');
+      expect(rel('2026-10-19T11:00:00.000Z')).toBe('1h ago');
+      expect(rel('2026-10-19T09:00:00.000Z')).toBe('3h ago');
+      expect(rel('2026-10-18T12:00:00.000Z')).toBe('1d ago');
+      expect(rel('2026-10-16T12:00:00.000Z')).toBe('3d ago');
+      expect(rel('2026-10-12T12:00:00.000Z')).toBe('1w ago');
+      expect(rel('2026-09-19T12:00:00.000Z')).toBe('1mo ago');
+      expect(rel('2025-10-19T12:00:00.000Z')).toBe('1y ago');
     });
 
-    it('renders future timestamps with "in"', () => {
-      expect(rel('2026-10-19T12:10:00.000Z')).toBe('in 10 minutes');
-      expect(rel('2026-10-22T12:00:00.000Z')).toBe('in 3 days');
-    });
-
-    it('handles invalid input with the placeholder', () => {
-      expect(formatRelativeTime(null)).toBe(INVALID_TIME_PLACEHOLDER);
-      expect(formatRelativeTime('nope')).toBe(INVALID_TIME_PLACEHOLDER);
-    });
-
-    it('honours a custom fallback', () => {
-      expect(formatRelativeTime(undefined, { fallback: 'unknown' })).toBe(
-        'unknown'
+    it('falls back to absolute text for future dates', () => {
+      expect(rel('2026-10-19T12:10:00.000Z')).toBe(
+        formatAbsoluteDateTime('2026-10-19T12:10:00.000Z', {
+          locale: 'en-US',
+          timeZone: 'UTC',
+        })
       );
+    });
+
+    it('falls back to absolute text for invalid input', () => {
+      expect(formatRelativeTime(null, { locale: 'en-US', timeZone: 'UTC' })).toBe(
+        INVALID_TIME_PLACEHOLDER
+      );
+      expect(formatRelativeTime('nope', { locale: 'en-US', timeZone: 'UTC' })).toBe(
+        INVALID_TIME_PLACEHOLDER
+      );
+    });
+
+    it('honours a custom fallback for invalid input', () => {
+      expect(
+        formatRelativeTime(undefined, {
+          fallback: 'unknown',
+          locale: 'en-US',
+          timeZone: 'UTC',
+        })
+      ).toBe('unknown');
     });
   });
 

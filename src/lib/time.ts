@@ -26,10 +26,12 @@ const MONTH = 30 * DAY;
 const YEAR = 365 * DAY;
 
 export interface RelativeTimeOptions {
-  /** Value to render for missing/invalid input (default `INVALID_TIME_PLACEHOLDER`). */
+  /** Value used when absolute fallback is needed for invalid input. */
   fallback?: string;
-  /** BCP-47 locale passed through to `Intl.RelativeTimeFormat`. */
+  /** BCP-47 locale used for absolute fallback formatting. */
   locale?: string;
+  /** Time zone used for absolute fallback formatting. */
+  timeZone?: string;
   /** Injected "now" for deterministic tests. */
   now?: Date | number;
 }
@@ -45,44 +47,43 @@ export function parseDate(value: unknown): Date | null {
 }
 
 /**
- * Human-readable relative time, e.g. "just now", "5 minutes ago",
- * "in 3 days". Future timestamps are phrased with "in ...".
+ * Relative time label for past/recent timestamps (e.g. "just now", "12m ago").
+ * Falls back to absolute date/time text for future or invalid dates (#893).
  */
 export function formatRelativeTime(
   value: unknown,
   options: RelativeTimeOptions = {}
 ): string {
-  const { fallback = INVALID_TIME_PLACEHOLDER, now } = options;
+  const fallback = options.fallback ?? INVALID_TIME_PLACEHOLDER;
   const date = parseDate(value);
-  if (!date) return fallback;
+  if (!date) {
+    return formatAbsoluteDateTime(value, {
+      fallback,
+      locale: options.locale,
+      timeZone: options.timeZone,
+    });
+  }
 
-  const nowMs = now === undefined ? Date.now() : new Date(now).getTime();
+  const nowMs = options.now === undefined ? Date.now() : new Date(options.now).getTime();
   const diffSeconds = Math.round((date.getTime() - nowMs) / 1000);
+
+  // Future or invalid-relative cases fall back to absolute text.
+  if (diffSeconds > 0) {
+    return formatAbsoluteDateTime(date, {
+      fallback,
+      locale: options.locale,
+      timeZone: options.timeZone,
+    });
+  }
+
   const abs = Math.abs(diffSeconds);
-
   if (abs < 45) return 'just now';
-
-  const { amount, unit } = describeDuration(abs);
-
-  // `Intl.RelativeTimeFormat` produces "5 minutes ago" / "in 3 days" and
-  // handles pluralization and the future/past sign for us.
-  const formatter = new Intl.RelativeTimeFormat(options.locale, {
-    numeric: 'auto',
-  });
-  return formatter.format(diffSeconds < 0 ? -amount : amount, unit);
-}
-
-function describeDuration(seconds: number): {
-  amount: number;
-  unit: Intl.RelativeTimeFormatUnit;
-} {
-  if (seconds < MINUTE) return { amount: Math.round(seconds), unit: 'second' };
-  if (seconds < HOUR) return { amount: Math.round(seconds / MINUTE), unit: 'minute' };
-  if (seconds < DAY) return { amount: Math.round(seconds / HOUR), unit: 'hour' };
-  if (seconds < WEEK) return { amount: Math.round(seconds / DAY), unit: 'day' };
-  if (seconds < MONTH) return { amount: Math.round(seconds / WEEK), unit: 'week' };
-  if (seconds < YEAR) return { amount: Math.round(seconds / MONTH), unit: 'month' };
-  return { amount: Math.round(seconds / YEAR), unit: 'year' };
+  if (abs < HOUR) return `${Math.round(abs / MINUTE)}m ago`;
+  if (abs < DAY) return `${Math.round(abs / HOUR)}h ago`;
+  if (abs < WEEK) return `${Math.round(abs / DAY)}d ago`;
+  if (abs < MONTH) return `${Math.round(abs / WEEK)}w ago`;
+  if (abs < YEAR) return `${Math.round(abs / MONTH)}mo ago`;
+  return `${Math.round(abs / YEAR)}y ago`;
 }
 
 export interface AbsoluteTimeOptions {
