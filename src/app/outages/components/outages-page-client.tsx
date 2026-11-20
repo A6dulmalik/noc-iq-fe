@@ -54,6 +54,15 @@ function toOutageRecord(row: Outage): OutageRecord {
   };
 }
 
+/**
+ * Stable React key for an outage row. Using the id (rather than the map index)
+ * keeps a row's DOM node and selection state when the list is reordered or a
+ * different outage is removed.
+ */
+export function getOutageRowKey(outage: Outage): string {
+  return outage.id;
+}
+
 type Props = {
   data?: Outage[];
   /** Called after a successful bulk delete so the parent can refetch. */
@@ -453,7 +462,8 @@ export default function OutagesPageClient({
           {filteredData.length > 0 ? (
             filteredData.map((item) => (
               <div
-                key={item.id}
+                key={getOutageRowKey(item)}
+                data-outage-id={getOutageRowKey(item)}
                 className="border rounded-lg p-4 flex items-center justify-between"
               >
                 <div className="flex flex-col gap-1">
