@@ -8,7 +8,13 @@ import { useToast } from '@/components/ui/toast';
 import { PaymentService } from '@/services/paymentService';
 import type { PaginatedPayments, Payment } from '@/types/payment';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ExternalLink, RefreshCcw, Scale, X } from 'lucide-react';
+import { ExternalLink, MoreVertical, RefreshCcw, Scale, ShieldAlert, X } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { explorerLink, STELLAR_NETWORK_LABEL } from '@/lib/explorer';
 import { queryKeys } from '@/lib/queryKeys';
 
@@ -74,6 +80,10 @@ export function PaymentDetailDrawer({
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const [actionNote, setActionNote] = useState('');
   const [showFullHistory, setShowFullHistory] = useState(false);
+  const [showOverrideModal, setShowOverrideModal] = useState(false);
+  const [maxFeeMultiplier, setMaxFeeMultiplier] = useState('');
+  const [adminPassword, setAdminPassword] = useState('');
+  const [overrideError, setOverrideError] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const toast = useToast();
   const { user } = useSession();
@@ -161,6 +171,33 @@ export function PaymentDetailDrawer({
     },
   });
 
+  const overrideMutation = useMutation({
+    mutationFn: () =>
+      PaymentService.adminOverridePayment(id, {
+        maxFeeMultiplier: Number(maxFeeMultiplier),
+        adminPassword,
+        note: actionNote.trim() || undefined,
+      }),
+    onSuccess: (updatedPayment) => {
+      syncCaches(updatedPayment);
+      void refetchHistory();
+      setShowOverrideModal(false);
+      setMaxFeeMultiplier('');
+      setAdminPassword('');
+      setOverrideError(null);
+      setActionNote('');
+      toast('Administrative override submitted.', 'success');
+    },
+    onError: (error) => {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Failed to submit administrative override.';
+      setOverrideError(message);
+      toast(message, 'error');
+    },
+  });
+
   if (!id) return null;
 
   if (isLoading || !payment) {
@@ -186,6 +223,7 @@ export function PaymentDetailDrawer({
 
   const role = user?.role ?? null;
   const isPrivilegedOperator = role === 'admin' || role === 'engineer';
+  const isAdmin = role === 'admin';
   const normalizedStatus = payment.status.toUpperCase();
   const reconciliationState = payment.reconciliationStatus ?? 'untracked';
   const canRetry = isPrivilegedOperator && normalizedStatus === 'FAILED';
@@ -193,7 +231,29 @@ export function PaymentDetailDrawer({
     isPrivilegedOperator &&
     ['CONFIRMED', 'RELEASED', 'REFUNDED'].includes(normalizedStatus) &&
     reconciliationState !== 'matched';
+  const canAdminOverride = isAdmin;
   const visibleHistory = showFullHistory ? history : history.slice(0, 6);
+
+  const openOverrideModal = () => {
+    setOverrideError(null);
+    setMaxFeeMultiplier('');
+    setAdminPassword('');
+    setShowOverrideModal(true);
+  };
+
+  const submitOverride = () => {
+    const multiplier = Number(maxFeeMultiplier);
+    if (!Number.isFinite(multiplier) || multiplier <= 0) {
+      setOverrideError('Enter a valid custom max fee multiplier greater than 0.');
+      return;
+    }
+    if (!adminPassword.trim()) {
+      setOverrideError('Admin password is required for re-authentication.');
+      return;
+    }
+    setOverrideError(null);
+    overrideMutation.mutate();
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
@@ -366,16 +426,61 @@ export function PaymentDetailDrawer({
             </p>
           </div>
 
-          {canRetry || canReconcile ? (
+          {canRetry || canReconcile || canAdminOverride ? (
             <div className="rounded-xl border border-slate-200 p-4">
-              <div className="mb-3">
-                <h3 className="text-sm font-semibold text-slate-800">
-                  Operations
-                </h3>
-                <p className="text-sm text-slate-500">
-                  Run manual retry or reconciliation actions when the current
-                  payment state allows it.
-                </p>
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-800">
+                    Operations
+                  </h3>
+                  <p className="text-sm text-slate-500">
+                    Run manual retry, reconciliation, or administrative
+                    override actions when available.
+                  </p>
+                </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-2 rounded border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2"
+                      aria-label="Payment options"
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                      Payment options
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    {canRetry ? (
+                      <DropdownMenuItem
+                        onSelect={() => retryMutation.mutate()}
+                        disabled={
+                          retryMutation.isPending ||
+                          reconcileMutation.isPending ||
+                          overrideMutation.isPending
+                        }
+                      >
+                        Retry payment
+                      </DropdownMenuItem>
+                    ) : null}
+                    {canReconcile ? (
+                      <DropdownMenuItem
+                        onSelect={() => reconcileMutation.mutate()}
+                        disabled={
+                          retryMutation.isPending ||
+                          reconcileMutation.isPending ||
+                          overrideMutation.isPending
+                        }
+                      >
+                        Reconcile payment
+                      </DropdownMenuItem>
+                    ) : null}
+                    {canAdminOverride ? (
+                      <DropdownMenuItem onSelect={openOverrideModal}>
+                        Administrative Override
+                      </DropdownMenuItem>
+                    ) : null}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
               <label
                 htmlFor="action-note"
@@ -390,7 +495,7 @@ export function PaymentDetailDrawer({
                 onChange={(e) => setActionNote(e.target.value)}
                 className="mb-3 w-full rounded border px-3 py-2 text-sm"
                 rows={3}
-                placeholder="Add context for the retry or reconciliation action..."
+                placeholder="Add context for the retry, reconciliation, or override action..."
               />
               <div className="flex flex-col gap-2 sm:flex-row">
                 {canRetry ? (
@@ -398,7 +503,9 @@ export function PaymentDetailDrawer({
                     type="button"
                     onClick={() => retryMutation.mutate()}
                     disabled={
-                      retryMutation.isPending || reconcileMutation.isPending
+                      retryMutation.isPending ||
+                      reconcileMutation.isPending ||
+                      overrideMutation.isPending
                     }
                     className="inline-flex flex-1 items-center justify-center gap-2 rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
                   >
@@ -411,7 +518,9 @@ export function PaymentDetailDrawer({
                     type="button"
                     onClick={() => reconcileMutation.mutate()}
                     disabled={
-                      retryMutation.isPending || reconcileMutation.isPending
+                      retryMutation.isPending ||
+                      reconcileMutation.isPending ||
+                      overrideMutation.isPending
                     }
                     className="inline-flex flex-1 items-center justify-center gap-2 rounded border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 disabled:opacity-50"
                   >
@@ -425,10 +534,113 @@ export function PaymentDetailDrawer({
             </div>
           ) : (
             <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
-              Manual retry and reconciliation controls are unavailable for the
-              current payment state or your role.
+              Manual retry, reconciliation, and administrative override controls
+              are unavailable for your role.
             </div>
           )}
+
+          {showOverrideModal ? (
+            <div
+              className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="admin-override-title"
+            >
+              <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl">
+                <div className="mb-4 flex items-start gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+                    <ShieldAlert className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3
+                      id="admin-override-title"
+                      className="text-base font-semibold text-slate-900"
+                    >
+                      Administrative Override
+                    </h3>
+                    <p className="text-sm text-slate-500">
+                      Force-retry this payment with updated fee bounds. Admin
+                      password re-authentication is required before submission.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <label
+                      htmlFor="max-fee-multiplier"
+                      className="mb-1 block text-sm font-medium text-slate-700"
+                    >
+                      Custom max fee multiplier
+                    </label>
+                    <input
+                      id="max-fee-multiplier"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      inputMode="decimal"
+                      value={maxFeeMultiplier}
+                      onChange={(e) => setMaxFeeMultiplier(e.target.value)}
+                      className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                      placeholder="e.g. 1.5"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="admin-override-password"
+                      className="mb-1 block text-sm font-medium text-slate-700"
+                    >
+                      Admin password
+                    </label>
+                    <input
+                      id="admin-override-password"
+                      type="password"
+                      autoComplete="current-password"
+                      value={adminPassword}
+                      onChange={(e) => setAdminPassword(e.target.value)}
+                      className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                      placeholder="Enter admin password"
+                    />
+                    <p className="mt-1 text-xs text-slate-500">
+                      Re-authentication is required before submitting this
+                      override.
+                    </p>
+                  </div>
+                  {overrideError ? (
+                    <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                      {overrideError}
+                    </p>
+                  ) : null}
+                </div>
+
+                <div className="mt-5 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (overrideMutation.isPending) return;
+                      setShowOverrideModal(false);
+                      setOverrideError(null);
+                      setAdminPassword('');
+                    }}
+                    className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    disabled={overrideMutation.isPending}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={submitOverride}
+                    disabled={overrideMutation.isPending}
+                    className="rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+                  >
+                    {overrideMutation.isPending
+                      ? 'Submitting...'
+                      : 'Submit override'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
 
           <div className="rounded-xl border border-slate-200 p-4">
             <div className="mb-3 flex items-center justify-between gap-3">
