@@ -3,7 +3,10 @@ import { describe, it, expect } from 'vitest';
 import {
   formatAttemptTime,
   getBatchActionState,
+  getReplayStatusMessage,
+  isStaleSubscriptionError,
   MAX_PURGE_SELECTION,
+  removeDeadLetterItems,
   toDeadLetterItems,
 } from '@/lib/webhookDeadLetter';
 import type { WebhookDelivery } from '@/types/webhook';
@@ -138,5 +141,33 @@ describe('formatAttemptTime', () => {
   it('handles missing and invalid timestamps', () => {
     expect(formatAttemptTime(null)).toBe('—');
     expect(formatAttemptTime('nope')).toBe('—');
+  });
+});
+
+describe('stale replay deliveries', () => {
+  it('recognises a deleted subscription by status or message', () => {
+    expect(isStaleSubscriptionError({ response: { status: 404 } })).toBe(true);
+    expect(isStaleSubscriptionError({ response: { status: 410 } })).toBe(true);
+    expect(
+      isStaleSubscriptionError(new Error('Webhook subscription not found'))
+    ).toBe(true);
+    expect(isStaleSubscriptionError(new Error('network timeout'))).toBe(false);
+  });
+
+  it('returns recoverable copy instead of a pending state', () => {
+    const message = getReplayStatusMessage({
+      response: { status: 404 },
+    });
+    expect(message).toContain('no longer exists');
+    expect(message).toContain('removed');
+    expect(getReplayStatusMessage(new Error('boom'))).toContain('still available');
+  });
+
+  it('removes only the stale delivery rows', () => {
+    const rows = [delivery({ id: 'a' }), delivery({ id: 'b' })];
+    expect(removeDeadLetterItems(rows, ['a']).map((row) => row.id)).toEqual([
+      'b',
+    ]);
+    expect(removeDeadLetterItems(rows, [])).toBe(rows);
   });
 });

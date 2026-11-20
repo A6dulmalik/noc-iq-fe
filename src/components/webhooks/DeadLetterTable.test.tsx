@@ -197,3 +197,40 @@ describe('DeadLetterTable', () => {
     expect(screen.getAllByTestId('dead-letter-row')).toHaveLength(2);
   });
 });
+
+describe('DeadLetterTable stale replay handling', () => {
+  it('removes a stale delivery and announces a recoverable message', async () => {
+    const user = userEvent.setup();
+    const staleError = Object.assign(
+      new Error('Webhook subscription not found'),
+      { response: { status: 404 } }
+    );
+    const { onReplayBatch } = renderTable({
+      onReplayBatch: vi.fn().mockRejectedValue(staleError),
+    });
+
+    await user.click(screen.getAllByTestId('dead-letter-select')[0]);
+    await user.click(screen.getByTestId('dead-letter-replay'));
+
+    const status = await screen.findByTestId('dead-letter-replay-status');
+    expect(status).toHaveAttribute('aria-live', 'polite');
+    expect(status).toHaveTextContent('no longer exists');
+    expect(onReplayBatch).toHaveBeenCalledTimes(1);
+    expect(screen.queryAllByTestId('dead-letter-row')).toHaveLength(1);
+    expect(screen.queryByText('outage.created')).not.toBeInTheDocument();
+  });
+
+  it('keeps deliveries and selection after a normal replay failure', async () => {
+    const user = userEvent.setup();
+    renderTable({
+      onReplayBatch: vi.fn().mockRejectedValue(new Error('receiver timeout')),
+    });
+
+    await user.click(screen.getAllByTestId('dead-letter-select')[0]);
+    await user.click(screen.getByTestId('dead-letter-replay'));
+
+    const status = await screen.findByTestId('dead-letter-replay-status');
+    expect(status).toHaveTextContent('still available');
+    expect(screen.queryAllByTestId('dead-letter-row')).toHaveLength(2);
+  });
+});
