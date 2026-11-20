@@ -10,6 +10,7 @@ import type { PaginatedPayments, Payment } from '@/types/payment';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ExternalLink, RefreshCcw, Scale, X } from 'lucide-react';
 import { explorerLink, STELLAR_NETWORK_LABEL } from '@/lib/explorer';
+import { getSafeExternalUrl } from '@/lib/destinationSafety';
 import { queryKeys } from '@/lib/queryKeys';
 
 interface PaymentDetailDrawerProps {
@@ -339,7 +340,7 @@ export function PaymentDetailDrawer({
                 </p>
                 {(() => {
                   const href =
-                    payment.explorerUrl ??
+                    getSafeExternalUrl(payment.explorerUrl) ??
                     explorerLink('tx', payment.transactionHash);
                   return href ? (
                     <a

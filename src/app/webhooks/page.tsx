@@ -27,6 +27,7 @@ import {
 import { JsonPayloadViewer } from '@/components/webhooks/JsonPayloadViewer';
 import { useToast } from '@/components/ui/toast';
 import { RotateSecretModal } from '@/components/webhooks/RotateSecretModal';
+import { validateWebhookForm } from '@/lib/webhookForm';
 
 const AVAILABLE_EVENTS = [
   'outage.created',
@@ -287,8 +288,14 @@ is_valid = hmac.compare_digest(signature, hash)`;
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setFormError(null);
-    if (!formUrl) {
-      setFormError('URL is required.');
+    const urlError = validateWebhookForm({
+      url: formUrl,
+      description: '',
+      secret: '',
+      topics: formEvents,
+    }).url;
+    if (urlError) {
+      setFormError(urlError);
       return;
     }
     if (formEvents.length === 0) {
@@ -304,6 +311,21 @@ is_valid = hmac.compare_digest(signature, hash)`;
     } else {
       createMutation.mutate({ url: formUrl, events: formEvents });
     }
+  }
+
+  function handleTestConnection() {
+    const urlError = validateWebhookForm({
+      url: formUrl,
+      description: '',
+      secret: '',
+      topics: ['outage.created'],
+    }).url;
+    if (urlError) {
+      setFormError(urlError);
+      return;
+    }
+    setFormError(null);
+    testConnectionMutation.mutate(formUrl);
   }
 
   const isSaving = createMutation.isPending || updateMutation.isPending;
@@ -368,7 +390,7 @@ is_valid = hmac.compare_digest(signature, hash)`;
               />
               <button
                 type="button"
-                onClick={() => testConnectionMutation.mutate(formUrl)}
+                onClick={handleTestConnection}
                 disabled={!formUrl || testConnectionMutation.isPending}
                 className="shrink-0 rounded-lg border px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-40"
               >

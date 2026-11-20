@@ -7,6 +7,7 @@ import {
   maskSecret,
   validateWebhookForm,
   WEBHOOK_HTTPS_ERROR,
+  WEBHOOK_CREDENTIALS_ERROR,
   WEBHOOK_SECRET_ERROR,
   WEBHOOK_TOPICS,
   WEBHOOK_TOPICS_ERROR,
@@ -88,6 +89,23 @@ describe('validateWebhookForm url', () => {
       );
     }
   });
+
+  it('rejects credential-bearing and encoded loopback URLs without echoing credentials', () => {
+    const credentialUrl = 'https://alice:private-token@example.com/hook';
+    const credentialError = validateWebhookForm(
+      validValues({ url: credentialUrl })
+    ).url;
+    expect(credentialError).toBe(WEBHOOK_CREDENTIALS_ERROR);
+    expect(credentialError).not.toContain('private-token');
+
+    for (const url of [
+      'https://%31%32%37.0.0.1/hook',
+      'https://127.1/hook',
+      'https://%6cocalhost/hook',
+    ]) {
+      expect(validateWebhookForm(validValues({ url })).url).toBeTruthy();
+    }
+  });
 });
 
 describe('isPrivateHost', () => {
@@ -111,6 +129,11 @@ describe('isPrivateHost', () => {
 
   it('handles the 0.0.0.0 range', () => {
     expect(isPrivateHost('0.0.0.0')).toBe(true);
+  });
+
+  it('recognizes percent-encoded loopback host names', () => {
+    expect(isPrivateHost('%31%32%37.0.0.1')).toBe(true);
+    expect(isPrivateHost('%6cocalhost')).toBe(true);
   });
 });
 

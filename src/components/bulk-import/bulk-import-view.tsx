@@ -31,8 +31,11 @@ import {
   type ImportHistoryJob,
 } from './ImportHistoryDrawer';
 import type { SourceTimezone } from '@/lib/timezoneConvert';
-import { convertRowTimestampsToUtc } from '@/lib/timezoneConvert';
-import { parseCsvInWorker } from '@/lib/csvParseClient';
+import {
+  convertRowTimestampsToUtc,
+  convertTimestampToUtc,
+} from '@/lib/timezoneConvert';
+import { parseCsvSync } from '@/lib/csvParseClient';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 const MAX_PREVIEW_ROWS = 100;
@@ -115,14 +118,22 @@ function parseCSV(text: string): ParsedCSV {
 }
 
 // ─── Validation ──────────────────────────────────────────────────────────────
-function isValidDate(dateString: string): boolean {
-  const d = new Date(dateString);
-  return d instanceof Date && !isNaN(d.getTime());
+function parseTimestamp(
+  dateString: string,
+  sourceTimezone: SourceTimezone
+): Date | null {
+  try {
+    const date = new Date(convertTimestampToUtc(dateString, sourceTimezone));
+    return Number.isNaN(date.getTime()) ? null : date;
+  } catch {
+    return null;
+  }
 }
 
 function validateCSV(
   headers: string[],
-  rows: string[][]
+  rows: string[][],
+  sourceTimezone: SourceTimezone
 ): ImportValidationError[] {
   const errors: ImportValidationError[] = [];
 
@@ -153,7 +164,7 @@ function validateCSV(
             message: `Required field "${field}" is empty`,
           });
         } else if (field === 'start_time' || field === 'end_time') {
-          if (!isValidDate(row[colIndex])) {
+          if (!parseTimestamp(row[colIndex], sourceTimezone)) {
             errors.push({
               row: i + 2,
               field,
@@ -167,16 +178,15 @@ function validateCSV(
     // Check if end_time is after start_time
     const startTimeIndex = headers.indexOf('start_time');
     const endTimeIndex = headers.indexOf('end_time');
-    if (
-      startTimeIndex !== -1 &&
-      endTimeIndex !== -1 &&
-      row[startTimeIndex] &&
-      row[endTimeIndex] &&
-      isValidDate(row[startTimeIndex]) &&
-      isValidDate(row[endTimeIndex])
-    ) {
-      const startTime = new Date(row[startTimeIndex]);
-      const endTime = new Date(row[endTimeIndex]);
+    const startTime =
+      startTimeIndex !== -1
+        ? parseTimestamp(row[startTimeIndex], sourceTimezone)
+        : null;
+    const endTime =
+      endTimeIndex !== -1
+        ? parseTimestamp(row[endTimeIndex], sourceTimezone)
+        : null;
+    if (startTime && endTime) {
       if (startTime >= endTime) {
         errors.push({
           row: i + 2,
@@ -300,7 +310,8 @@ async function parseImportFile(file: File): Promise<ParsedFile> {
  */
 function buildPreview(
   parsed: ParsedFile,
-  mapping: ColumnMapping
+  mapping: ColumnMapping,
+  sourceTimezone: SourceTimezone
 ): PreviewState {
   const isCsv = parsed.kind === 'csv';
   const mapped = isCsv
@@ -308,7 +319,7 @@ function buildPreview(
     : { headers: parsed.headers, rows: parsed.rows };
 
   const errors = isCsv
-    ? validateCSV(mapped.headers, mapped.rows)
+    ? validateCSV(mapped.headers, mapped.rows, sourceTimezone)
     : parsed.errors;
   const warnings: ImportValidationError[] = [];
 
@@ -498,13 +509,13 @@ export default function BulkImportView() {
 
   const preview = useMemo(() => {
     if (!parsed) return null;
-    const derived = buildPreview(parsed, mapping);
+    const derived = buildPreview(parsed, mapping, sourceTimezone);
     return {
       ...derived,
       rows: previewEdits.rows ?? derived.rows,
       errors: previewEdits.errors ?? derived.errors,
     };
-  }, [parsed, mapping, previewEdits]);
+  }, [parsed, mapping, previewEdits, sourceTimezone]);
 
   const missingFields = useMemo(
     () => missingRequiredFields(SCHEMA_FIELDS, mapping),
@@ -560,28 +571,40 @@ export default function BulkImportView() {
   );
 
   /** Rebuild a CSV File excluding duplicate rows when the option is enabled (#631). */
-  const buildUploadFile = useCallback((): File | null => {
-    if (!file || !preview) return file;
-    if (!excludeDuplicates) return file;
-    const detection = detectDuplicateRows(preview.headers, preview.rows);
-    if (detection.duplicateCount === 0) return file;
-
+  const buildUploadFile = useCallback(async (): Promise<File | null> => {
+    if (!file || !parsed || parsed.kind !== 'csv') return file;
+    const fullCsv = parseCsvSync(await file.text());
+    const mapped = applyColumnMapping(fullCsv.headers, fullCsv.rows, mapping);
+    const detection = excludeDuplicates
+      ? detectDuplicateRows(mapped.headers, mapped.rows)
+      : null;
     const escape = (cell: string) => {
       if (/[",\n\r]/.test(cell)) return `"${cell.replace(/"/g, '""')}"`;
       return cell;
     };
-    const kept = preview.rows.filter(
-      (_, i) => !detection.excludedRowIndexes.has(i)
+    const kept = mapped.rows
+      .filter((_, index) => !detection?.excludedRowIndexes.has(index))
+      .map((row) =>
+        Object.fromEntries(mapped.headers.map((header, index) => [header, row[index] ?? '']))
+      );
+    const converted = convertRowTimestampsToUtc(
+      kept,
+      ['start_time', 'end_time'].filter((field) =>
+        mapped.headers.includes(field)
+      ),
+      sourceTimezone
     );
     const lines = [
-      preview.headers.join(','),
-      ...kept.map((r) => r.map(escape).join(',')),
+      mapped.headers.map(escape).join(','),
+      ...converted.map((row) =>
+        mapped.headers.map((header) => escape(row[header] ?? '')).join(',')
+      ),
     ];
     const blob = new Blob([lines.join('\n') + '\n'], {
       type: 'text/csv;charset=utf-8;',
     });
     return new File([blob], file.name, { type: file.type || 'text/csv' });
-  }, [file, preview, excludeDuplicates]);
+  }, [file, parsed, mapping, excludeDuplicates, sourceTimezone]);
 
   // ─── Submit ────────────────────────────────────────────────────────────────
   const handleSubmit = useCallback(async () => {
@@ -602,7 +625,7 @@ export default function BulkImportView() {
     });
 
     try {
-      const uploadFile = buildUploadFile() ?? file;
+      const uploadFile = (await buildUploadFile()) ?? file;
       const response = await bulkImportOutages(uploadFile, {
         signal: controller.signal,
         onProgress: (pct) => {
@@ -688,6 +711,16 @@ export default function BulkImportView() {
   const isParsing = file !== null && parsed === null;
   const isProcessing = isUploading || isParsing;
   const isCsv = parsed?.kind === 'csv';
+  const sampleTimestamps = useMemo(() => {
+    if (!preview) return [];
+    const indexes = ['start_time', 'end_time']
+      .map((field) => preview.headers.indexOf(field))
+      .filter((index) => index >= 0);
+    return preview.rows
+      .slice(0, 3)
+      .flatMap((row) => indexes.map((index) => row[index] ?? ''))
+      .filter(Boolean);
+  }, [preview]);
   const showColumnMapper =
     isCsv && (!mappingConfirmed || missingFields.length > 0);
   const showMappingSummary =
@@ -727,8 +760,11 @@ export default function BulkImportView() {
         </div>
         <TimezoneSelector
           value={sourceTimezone}
-          onChange={setSourceTimezone}
-          sampleTimestamps={[]}
+          onChange={(timezone) => {
+            setSourceTimezone(timezone);
+            setPreviewEdits({});
+          }}
+          sampleTimestamps={sampleTimestamps}
         />
       </div>
 
@@ -866,6 +902,7 @@ export default function BulkImportView() {
                   headers={preview.headers}
                   rows={preview.rows}
                   errors={preview.errors}
+                  sourceTimezone={sourceTimezone}
                   excludedRowIndexes={
                     excludeDuplicates
                       ? detectDuplicateRows(preview.headers, preview.rows)
