@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { WifiOff } from 'lucide-react';
 import {
@@ -16,6 +16,15 @@ import { deleteOutage, resolveOutage } from '@/services/outages';
 import { RowActions } from '@/components/tables/RowActions';
 import { SeverityBadge } from '@/components/shared/SeverityBadgeAndShortcuts';
 import SeverityLegend from '@/components/outages/SeverityLegend';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { formatRelativeTime, formatTimestamp } from '@/lib/time';
+import { useAutoRefresh } from '@/hooks/useAutoRefresh';
+import { TableStatusPill } from '@/components/outages/TableStatusPill';
 import type {
   Outage as OutageRecord,
   OutageStatus,
@@ -313,7 +322,8 @@ export default function OutagesPageClient({
   // UI
   // -----------------------------
   return (
-    <div className="space-y-6">
+    <TooltipProvider>
+      <div className="space-y-6">
       {/* Controls */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <OutageSearchBar
@@ -443,9 +453,20 @@ export default function OutagesPageClient({
                       {item.status}
                     </span>
                   </div>
-                  <p className="text-sm text-muted-foreground">
-                    {new Date(item.createdAt).toLocaleString()}
-                  </p>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <p
+                        tabIndex={0}
+                        className="text-sm text-muted-foreground outline-none focus-visible:underline"
+                        aria-label={`Detected ${formatTimestamp(item.createdAt)}`}
+                      >
+                        {formatRelativeTime(item.createdAt)}
+                      </p>
+                    </TooltipTrigger>
+                    <TooltipContent side="top">
+                      {formatTimestamp(item.createdAt)}
+                    </TooltipContent>
+                  </Tooltip>
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -538,6 +559,7 @@ export default function OutagesPageClient({
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </TooltipProvider>
   );
 }

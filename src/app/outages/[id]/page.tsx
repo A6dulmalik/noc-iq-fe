@@ -17,7 +17,14 @@ import {
 } from '@/components/ui/route-state';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/components/ui/toast';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { announce } from '@/hooks/useOutageRealtime';
+import { formatRelativeTime, formatTimestamp } from '@/lib/time';
 import {
   getSlaAmountTooltip,
   getSlaRatingTooltip,
@@ -270,6 +277,7 @@ export default function OutageDetailsPage() {
   const timeline = buildTimeline(outage);
 
   return (
+    <TooltipProvider>
     <div className="container mx-auto max-w-4xl space-y-6 px-4 py-8">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div className="flex items-center gap-3">
@@ -485,9 +493,20 @@ export default function OutageDetailsPage() {
           <CardContent className="space-y-3 text-sm">
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Started At</span>
-              <span className="font-medium">
-                {new Date(outage.detected_at).toLocaleString()}
-              </span>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span
+                    tabIndex={0}
+                    className="font-medium outline-none focus-visible:underline"
+                    aria-label={`Detected ${formatTimestamp(outage.detected_at)}`}
+                  >
+                    {formatRelativeTime(outage.detected_at)}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  {formatTimestamp(outage.detected_at)}
+                </TooltipContent>
+              </Tooltip>
             </div>
             <Separator />
             <div className="flex items-center justify-between">
@@ -645,7 +664,7 @@ export default function OutageDetailsPage() {
                       {event.label}
                     </p>
                     <p className="text-xs text-slate-500">
-                      {new Date(event.time).toLocaleString()}
+                      {formatTimestamp(event.time)}
                     </p>
                     {event.note && (
                       <p className="mt-0.5 text-xs text-slate-400">
@@ -830,5 +849,6 @@ export default function OutageDetailsPage() {
         </div>
       )}
     </div>
+    </TooltipProvider>
   );
 }
