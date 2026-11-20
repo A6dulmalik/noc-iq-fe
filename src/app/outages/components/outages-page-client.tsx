@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { WifiOff } from 'lucide-react';
 import {
@@ -16,6 +16,8 @@ import { deleteOutage, resolveOutage } from '@/services/outages';
 import { RowActions } from '@/components/tables/RowActions';
 import { SeverityBadge } from '@/components/shared/SeverityBadgeAndShortcuts';
 import SeverityLegend from '@/components/outages/SeverityLegend';
+import { TableStatusPill } from '@/components/outages/TableStatusPill';
+import { useAutoRefresh } from '@/hooks/useAutoRefresh';
 import type {
   Outage as OutageRecord,
   OutageStatus,
@@ -88,6 +90,12 @@ export default function OutagesPageClient({
     sort,
   } = filters;
   const sortBy = sort as 'date' | 'title';
+  // A reversed range can never return rows. Keep it client-side so no query is
+  // issued and the user gets an explanation instead of an empty table.
+  const dateRangeError =
+    dateFrom && dateTo && dateFrom > dateTo
+      ? 'Start date cannot be after end date.'
+      : null;
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [removedIds, setRemovedIds] = useState<string[]>([]);
   const rows = useMemo(
@@ -143,6 +151,7 @@ export default function OutagesPageClient({
   // Derived Data (Search + Sort)
   // -----------------------------
   const filteredData = useMemo(() => {
+    if (dateRangeError) return [];
     let result = [...rows];
 
     // Search — matches the outage id, site name and description (#616)
@@ -175,7 +184,7 @@ export default function OutagesPageClient({
     }
 
     return result;
-  }, [rows, search, severity, dateFrom, dateTo, sortBy]);
+  }, [rows, search, severity, dateFrom, dateTo, dateRangeError, sortBy]);
 
   // -----------------------------
   // Selection State (visible rows)
@@ -353,7 +362,9 @@ export default function OutagesPageClient({
             type="date"
             value={dateFrom}
             onChange={(e) => setFilters({ date_from: e.target.value })}
-            className="border rounded-md px-3 py-2"
+            aria-invalid={!!dateRangeError}
+            aria-describedby={dateRangeError ? 'outage-date-range-error' : undefined}
+            className={`border rounded-md px-3 py-2 ${dateRangeError ? 'border-red-500' : ''}`}
           />
           <label className="sr-only" htmlFor="outage-date-to">
             To date
@@ -364,7 +375,9 @@ export default function OutagesPageClient({
             type="date"
             value={dateTo}
             onChange={(e) => setFilters({ date_to: e.target.value })}
-            className="border rounded-md px-3 py-2"
+            aria-invalid={!!dateRangeError}
+            aria-describedby={dateRangeError ? 'outage-date-range-error' : undefined}
+            className={`border rounded-md px-3 py-2 ${dateRangeError ? 'border-red-500' : ''}`}
           />
 
           <select
@@ -395,6 +408,18 @@ export default function OutagesPageClient({
           </button>
         </div>
       </div>
+
+      {dateRangeError ? (
+        <p
+          id="outage-date-range-error"
+          role="alert"
+          aria-live="polite"
+          data-testid="outage-date-range-error"
+          className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+        >
+          {dateRangeError}
+        </p>
+      ) : null}
 
       {/* List */}
       <div className="overflow-x-auto">
