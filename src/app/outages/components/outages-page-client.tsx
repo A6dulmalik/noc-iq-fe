@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { WifiOff } from 'lucide-react';
 import {
@@ -12,15 +12,19 @@ import { ExportButton } from '@/components/outages/ExportButton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { useToast } from '@/components/ui/toast';
 import { useUrlSync } from '@/hooks/useUrlSync';
+import { useAutoRefresh } from '@/hooks/useAutoRefresh';
 import { deleteOutage, resolveOutage } from '@/services/outages';
 import { RowActions } from '@/components/tables/RowActions';
 import { SeverityBadge } from '@/components/shared/SeverityBadgeAndShortcuts';
 import SeverityLegend from '@/components/outages/SeverityLegend';
+import SlaStatusBadge from '@/components/outages/SlaStatusBadge';
+import { TableStatusPill } from '@/components/outages/TableStatusPill';
 import type {
   Outage as OutageRecord,
   OutageStatus,
   Severity,
 } from '@/types/outages';
+import type { SLAResult } from '@/types/sla';
 
 type Outage = {
   id: string;
@@ -28,6 +32,7 @@ type Outage = {
   severity: Severity;
   status: OutageStatus;
   createdAt: string;
+  sla_status?: SLAResult;
 };
 
 const STATUS_STYLE: Record<OutageStatus, string> = {
@@ -49,6 +54,7 @@ function toOutageRecord(row: Outage): OutageRecord {
     detected_at: row.createdAt,
     description: '',
     affected_services: [],
+    sla_status: row.sla_status,
   };
 }
 
@@ -442,6 +448,13 @@ export default function OutagesPageClient({
                     >
                       {item.status}
                     </span>
+                    {item.sla_status ? (
+                      <SlaStatusBadge
+                        status={item.sla_status.status}
+                        result={item.sla_status}
+                        reasonCode={item.sla_status.reason_code}
+                      />
+                    ) : null}
                   </div>
                   <p className="text-sm text-muted-foreground">
                     {new Date(item.createdAt).toLocaleString()}
