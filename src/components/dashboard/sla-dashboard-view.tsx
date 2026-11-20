@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
+import { RefreshCw } from 'lucide-react';
 
 import KPICard from '@/components/dashboard/KPICard';
 import OutageAlertBanner from '@/components/dashboard/OutageAlertBanner';
@@ -355,6 +356,21 @@ export default function SLADashboardView() {
     [outageItems]
   );
 
+  const isDashboardRefreshing =
+    primary.isFetching ||
+    secondary.isFetching ||
+    mttrSample.isFetching ||
+    outagesQuery.isFetching;
+
+  const handleDashboardRefresh = useCallback(async () => {
+    await Promise.all([
+      primary.refetch(),
+      secondary.refetch(),
+      mttrSample.refetch(),
+      outagesQuery.refetch(),
+    ]);
+  }, [primary, secondary, mttrSample, outagesQuery]);
+
   const onTrendClick = useCallback(
     (point: TrendPoint) => {
       pushOutageDrilldown(point);
@@ -680,10 +696,16 @@ export default function SLADashboardView() {
           </button>
           <button
             type="button"
-            onClick={() => void primary.refetch()}
-            className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
+            onClick={() => void handleDashboardRefresh()}
+            disabled={isDashboardRefreshing}
+            aria-label="Refresh dashboard"
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Refresh
+            <RefreshCw
+              className={`h-4 w-4 ${isDashboardRefreshing ? 'animate-spin' : ''}`}
+              aria-hidden="true"
+            />
+            {isDashboardRefreshing ? 'Refreshing' : 'Refresh'}
           </button>
         </div>
       </div>
