@@ -5,6 +5,9 @@ import { useMemo, useState } from 'react';
 import {
   formatAttemptTime,
   getBatchActionState,
+  getReplayStatusMessage,
+  isStaleSubscriptionError,
+  removeDeadLetterItems,
   toDeadLetterItems,
   type DeadLetterItem,
 } from '@/lib/webhookDeadLetter';
@@ -45,10 +48,19 @@ export default function DeadLetterTable({
 }: DeadLetterTableProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [isMutating, setIsMutating] = useState(false);
+  const [staleIds, setStaleIds] = useState<string[]>([]);
+  const [replayMessage, setReplayMessage] = useState<string | null>(null);
 
+  // Deliveries whose subscription was deleted are removed locally as well as
+  // via the query invalidation, so the row never sits in a false pending state
+  // while the parent refetch is still in flight.
+  const visibleDeliveries = useMemo(
+    () => removeDeadLetterItems(deliveries, staleIds),
+    [deliveries, staleIds]
+  );
   const items = useMemo(
-    () => toDeadLetterItems(deliveries, { webhookUrl, exhaustedAttempts }),
-    [deliveries, webhookUrl, exhaustedAttempts]
+    () => toDeadLetterItems(visibleDeliveries, { webhookUrl, exhaustedAttempts }),
+    [visibleDeliveries, webhookUrl, exhaustedAttempts]
   );
 
   const allSelected = items.length > 0 && selected.size === items.length;
@@ -71,9 +83,22 @@ export default function DeadLetterTable({
     if (!onReplayBatch || !actions.canReplay) return;
     const chosen = items.filter((item) => selected.has(item.id));
     setIsMutating(true);
+    setReplayMessage(null);
     try {
       await onReplayBatch(chosen);
       setSelected(new Set());
+    } catch (error) {
+      const message = getReplayStatusMessage(error);
+      setReplayMessage(message);
+      if (isStaleSubscriptionError(error)) {
+        const ids = chosen.map((item) => item.id);
+        setStaleIds((prev) => [...new Set([...prev, ...ids])]);
+        setSelected((prev) => {
+          const next = new Set(prev);
+          for (const id of ids) next.delete(id);
+          return next;
+        });
+      }
     } finally {
       setIsMutating(false);
     }
@@ -137,6 +162,17 @@ export default function DeadLetterTable({
           </button>
         </div>
       </div>
+
+      {replayMessage ? (
+        <p
+          role="status"
+          aria-live="polite"
+          data-testid="dead-letter-replay-status"
+          className="border-t border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800"
+        >
+          {replayMessage}
+        </p>
+      ) : null}
 
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">

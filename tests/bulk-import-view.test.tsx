@@ -1,6 +1,6 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import BulkImportView from '@/components/bulk-import/bulk-import-view';
 
@@ -32,6 +32,7 @@ const file = (name: string, content: string) =>
 
 describe('BulkImportView', () => {
   beforeEach(() => mockBulkImport.mockReset());
+  afterEach(() => vi.unstubAllEnvs());
 
   it('renders upload area with disabled button', () => {
     render(<BulkImportView />);
@@ -100,5 +101,39 @@ describe('BulkImportView', () => {
     await screen.findByText('data.csv');
     fireEvent.click(screen.getByRole('button', { name: /upload file/i }));
     expect(await screen.findByText('Invalid date')).toBeInTheDocument();
+  });
+
+  it('validates and uploads ambiguous local times using the selected instant', async () => {
+    vi.stubEnv('TZ', 'America/New_York');
+    mockBulkImport.mockResolvedValue({ imported: 1, skipped: 0, errors: [] });
+    render(<BulkImportView />);
+    const input = document.querySelector(
+      "input[type='file']"
+    ) as HTMLInputElement;
+    fireEvent.change(input, {
+      target: {
+        files: [
+          file(
+            'fall-back.csv',
+            'service_id,start_time,end_time\ns1,2026-11-01T01:15:00,2026-11-01T01:45:00'
+          ),
+        ],
+      },
+    });
+
+    await screen.findByText('fall-back.csv');
+    fireEvent.change(screen.getByLabelText('CSV source timezone'), {
+      target: { value: 'Local' },
+    });
+    const ambiguityNotes = await screen.findAllByText(/Repeated local time/);
+    expect(ambiguityNotes[0]).toHaveTextContent('2026-11-01T05:15:00.000Z');
+
+    fireEvent.click(screen.getByRole('button', { name: /upload file/i }));
+    await waitFor(() => expect(mockBulkImport).toHaveBeenCalled());
+
+    const uploadedFile = mockBulkImport.mock.calls[0][0] as File;
+    await expect(uploadedFile.text()).resolves.toContain(
+      '2026-11-01T05:15:00.000Z,2026-11-01T05:45:00.000Z'
+    );
   });
 });

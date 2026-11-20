@@ -1,4 +1,5 @@
 import { explorerLink } from '@/lib/explorer';
+import { getSafeExternalUrl } from '@/lib/destinationSafety';
 import type { Payment } from '@/types/payment';
 
 /**
@@ -60,7 +61,7 @@ export function toDisbursementRow(payment: Payment): DisbursementRow {
     txHash: payment.transactionHash,
     status: payment.status,
     explorerUrl:
-      payment.explorerUrl ??
+      getSafeExternalUrl(payment.explorerUrl) ??
       explorerLink('tx', payment.transactionHash) ??
       (recipient ? explorerLink('account', recipient) : null),
   };

@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { type AxiosRequestConfig } from 'axios';
 import { getCorrelationId } from '@/lib/telemetry/tracer';
 import { networkEvents } from '@/lib/network-events';
 
@@ -52,8 +52,9 @@ api.interceptors.request.use((config) => {
 
 // Single-flight refresh state
 let refreshPromise: Promise<string> | null = null;
-// Track retried request IDs to prevent infinite loops
-const retried = new WeakSet<object>();
+type RetryableAxiosRequestConfig = AxiosRequestConfig & {
+  _retry?: boolean;
+};
 
 async function doRefresh(): Promise<string> {
   const refreshToken = getRefreshToken();
@@ -88,8 +89,14 @@ api.interceptors.response.use(
       return Promise.reject(normalizeApiError(err));
     }
 
-    if (axiosErr?.response?.status === 401 && config && !retried.has(config)) {
-      retried.add(config);
+    const requestConfig = config as RetryableAxiosRequestConfig | undefined;
+
+    if (
+      axiosErr?.response?.status === 401 &&
+      requestConfig &&
+      !requestConfig._retry
+    ) {
+      requestConfig._retry = true;
       try {
         if (!refreshPromise) {
           refreshPromise = doRefresh().finally(() => {
@@ -97,22 +104,38 @@ api.interceptors.response.use(
           });
         }
         const newToken = await refreshPromise;
-        const cfg = config as { headers?: Record<string, string> };
+        const cfg = requestConfig as {
+          headers?: Record<string, string>;
+        };
         const headers = cfg.headers ?? {};
         cfg.headers = {
           ...headers,
           Authorization: `Bearer ${newToken}`,
         };
-        return api(config as unknown as Parameters<typeof api>[0]);
+        return api(requestConfig);
       } catch {
         clearTokens();
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new Event('auth:logout'));
         }
         return Promise.reject(
-          new Error('Session expired. Please sign in again.')
+          Object.assign(new Error('Session expired. Please sign in again.'), {
+            status: 401,
+          })
         );
       }
+    }
+
+    if (axiosErr?.response?.status === 401 && requestConfig?._retry) {
+      clearTokens();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('auth:logout'));
+      }
+      return Promise.reject(
+        Object.assign(new Error('Session expired. Please sign in again.'), {
+          status: 401,
+        })
+      );
     }
 
     return Promise.reject(normalizeApiError(err));

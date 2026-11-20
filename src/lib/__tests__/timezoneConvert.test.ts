@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import {
   convertTimestampToUtc,
   previewTimestampConversions,
@@ -7,6 +7,10 @@ import {
 } from '../timezoneConvert';
 
 describe('timezoneConvert (#634)', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it('leaves UTC source with Z suffix normalized', () => {
     const iso = convertTimestampToUtc('2026-01-15T12:00:00Z', 'UTC');
     expect(iso).toBe('2026-01-15T12:00:00.000Z');
@@ -57,5 +61,24 @@ describe('timezoneConvert (#634)', () => {
     expect(getOffsetMinutes('EST')).toBe(-300);
     expect(getOffsetMinutes('PST')).toBe(-480);
     expect(getOffsetMinutes('CET')).toBe(60);
+  });
+
+  it('resolves a repeated local time using the earlier occurrence', () => {
+    vi.stubEnv('TZ', 'America/New_York');
+
+    const preview = previewTimestampConversions(
+      ['2026-11-01T01:15:00', '2026-11-01T01:45:00'],
+      'Local'
+    );
+
+    expect(preview[0]).toMatchObject({
+      utc: '2026-11-01T05:15:00.000Z',
+      selectedOffsetMinutes: -240,
+      ambiguous: true,
+    });
+    expect(preview[1].utc).toBe('2026-11-01T05:45:00.000Z');
+    expect(
+      new Date(preview[1].utc).getTime() - new Date(preview[0].utc).getTime()
+    ).toBe(30 * 60_000);
   });
 });

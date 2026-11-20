@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useId, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Download,
   Eye,
@@ -14,6 +21,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { digestEvidenceManifest } from "@/lib/chainOfCustody";
 import { cn } from "@/lib/utils";
 import type { DisputeEvidence } from "@/types/sla";
 
@@ -124,6 +132,55 @@ export function EvidenceManager({
   const [preview, setPreview] = useState<DisputeEvidence | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const inputId = useId();
+  type EvidenceManifestEntry = Pick<
+    DisputeEvidence,
+    | "id"
+    | "filename"
+    | "content_type"
+    | "content_hash"
+    | "size_bytes"
+    | "uploaded_at"
+  >;
+  const [manifestDigest, setManifestDigest] = useState<{
+    entries: EvidenceManifestEntry[];
+    digest: string;
+  } | null>(null);
+  const manifestEntries = useMemo(
+    () =>
+      evidence.map(
+        ({
+          id,
+          filename,
+          content_type,
+          content_hash,
+          size_bytes,
+          uploaded_at,
+        }) => ({
+          id,
+          filename,
+          content_type,
+          content_hash,
+          size_bytes,
+          uploaded_at,
+        })
+      ),
+    [evidence]
+  );
+
+  useEffect(() => {
+    let active = true;
+    digestEvidenceManifest(manifestEntries)
+      .then((digest) => {
+        if (active) setManifestDigest({ entries: manifestEntries, digest });
+      })
+      .catch((error: unknown) => {
+        if (active) console.error("Failed to digest evidence manifest:", error);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [manifestEntries]);
 
   const download = useCallback(
     (item: DisputeEvidence) => {
@@ -194,6 +251,12 @@ export function EvidenceManager({
       </CardHeader>
 
       <CardContent className="space-y-4">
+        {evidence.length > 0 && manifestDigest?.entries === manifestEntries && (
+          <p className="break-all text-xs text-muted-foreground">
+            Evidence manifest SHA-256:{" "}
+            <code>{manifestDigest.digest}</code>
+          </p>
+        )}
         {evidence.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             No evidence has been attached to this dispute.

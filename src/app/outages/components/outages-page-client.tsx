@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { WifiOff } from 'lucide-react';
+import { SlidersHorizontal, WifiOff } from 'lucide-react';
 import {
   HighlightedText,
   OutageSearchBar,
@@ -54,6 +54,15 @@ function toOutageRecord(row: Outage): OutageRecord {
   };
 }
 
+/**
+ * Stable React key for an outage row. Using the id (rather than the map index)
+ * keeps a row's DOM node and selection state when the list is reordered or a
+ * different outage is removed.
+ */
+export function getOutageRowKey(outage: Outage): string {
+  return outage.id;
+}
+
 type Props = {
   data?: Outage[];
   /** Called after a successful bulk delete so the parent can refetch. */
@@ -90,17 +99,19 @@ export default function OutagesPageClient({
     sort,
   } = filters;
   const sortBy = sort as 'date' | 'title';
+  // A reversed range can never return rows. Keep it client-side so no query is
+  // issued and the user gets an explanation instead of an empty table.
+  const dateRangeError =
+    dateFrom && dateTo && dateFrom > dateTo
+      ? 'Start date cannot be after end date.'
+      : null;
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [removedIds, setRemovedIds] = useState<string[]>([]);
   const rows = useMemo(
     () => data.filter((item) => !removedIds.includes(item.id)),
     [data, removedIds]
   );
-  // A CTA belongs in the true no-data state, not in a filtered-away result.
-  const hasActiveFilters = Boolean(
-    search || severity || dateFrom || dateTo || sort !== FILTER_DEFAULTS.sort
-  );
-  const isEmptyDataset = rows.length === 0 && !hasActiveFilters;
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -150,6 +161,7 @@ export default function OutagesPageClient({
   // Derived Data (Search + Sort)
   // -----------------------------
   const filteredData = useMemo(() => {
+    if (dateRangeError) return [];
     let result = [...rows];
 
     // Search — matches the outage id, site name and description (#616)
@@ -182,7 +194,7 @@ export default function OutagesPageClient({
     }
 
     return result;
-  }, [rows, search, severity, dateFrom, dateTo, sortBy]);
+  }, [rows, search, severity, dateFrom, dateTo, dateRangeError, sortBy]);
 
   // -----------------------------
   // Selection State (visible rows)
@@ -330,7 +342,23 @@ export default function OutagesPageClient({
           totalCount={rows.length}
         />
 
-        <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          data-testid="outage-filter-toggle"
+          aria-expanded={filtersOpen}
+          aria-controls="outage-filter-controls"
+          onClick={() => setFiltersOpen((open) => !open)}
+          className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 md:hidden"
+        >
+          <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
+          {filtersOpen ? 'Hide filters' : 'Filters'}
+        </button>
+
+        <div
+          id="outage-filter-controls"
+          data-testid="outage-filter-controls"
+          className={`${filtersOpen ? 'flex' : 'hidden'} flex-wrap items-center gap-2 md:flex`}
+        >
           <TableStatusPill
             updatedAt={lastUpdatedAt}
             isRefreshing={isRefreshing}
@@ -360,7 +388,9 @@ export default function OutagesPageClient({
             type="date"
             value={dateFrom}
             onChange={(e) => setFilters({ date_from: e.target.value })}
-            className="border rounded-md px-3 py-2"
+            aria-invalid={!!dateRangeError}
+            aria-describedby={dateRangeError ? 'outage-date-range-error' : undefined}
+            className={`border rounded-md px-3 py-2 ${dateRangeError ? 'border-red-500' : ''}`}
           />
           <label className="sr-only" htmlFor="outage-date-to">
             To date
@@ -371,7 +401,9 @@ export default function OutagesPageClient({
             type="date"
             value={dateTo}
             onChange={(e) => setFilters({ date_to: e.target.value })}
-            className="border rounded-md px-3 py-2"
+            aria-invalid={!!dateRangeError}
+            aria-describedby={dateRangeError ? 'outage-date-range-error' : undefined}
+            className={`border rounded-md px-3 py-2 ${dateRangeError ? 'border-red-500' : ''}`}
           />
 
           <select
@@ -402,6 +434,18 @@ export default function OutagesPageClient({
           </button>
         </div>
       </div>
+
+      {dateRangeError ? (
+        <p
+          id="outage-date-range-error"
+          role="alert"
+          aria-live="polite"
+          data-testid="outage-date-range-error"
+          className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+        >
+          {dateRangeError}
+        </p>
+      ) : null}
 
       {/* List */}
       <div className="overflow-x-auto">
@@ -435,7 +479,8 @@ export default function OutagesPageClient({
           {filteredData.length > 0 ? (
             filteredData.map((item) => (
               <div
-                key={item.id}
+                key={getOutageRowKey(item)}
+                data-outage-id={getOutageRowKey(item)}
                 className="border rounded-lg p-4 flex items-center justify-between"
               >
                 <div className="flex flex-col gap-1">
