@@ -18,6 +18,7 @@ import {
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/components/ui/toast';
 import { announce } from '@/hooks/useOutageRealtime';
+import { formatTimestampWithTimeZone } from '@/lib/time';
 import {
   getSlaAmountTooltip,
   getSlaRatingTooltip,
@@ -486,7 +487,7 @@ export default function OutageDetailsPage() {
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Started At</span>
               <span className="font-medium">
-                {new Date(outage.detected_at).toLocaleString()}
+                {formatTimestampWithTimeZone(outage.detected_at)}
               </span>
             </div>
             <Separator />
@@ -494,7 +495,7 @@ export default function OutageDetailsPage() {
               <span className="text-muted-foreground">Resolved At</span>
               <span className="font-medium">
                 {outage.resolved_at
-                  ? new Date(outage.resolved_at).toLocaleString()
+                  ? formatTimestampWithTimeZone(outage.resolved_at)
                   : 'Ongoing'}
               </span>
             </div>
@@ -645,7 +646,7 @@ export default function OutageDetailsPage() {
                       {event.label}
                     </p>
                     <p className="text-xs text-slate-500">
-                      {new Date(event.time).toLocaleString()}
+                      {formatTimestampWithTimeZone(event.time)}
                     </p>
                     {event.note && (
                       <p className="mt-0.5 text-xs text-slate-400">
