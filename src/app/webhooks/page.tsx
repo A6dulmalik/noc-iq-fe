@@ -20,9 +20,10 @@ import type { Webhook, WebhookDelivery } from '@/types/webhook';
 import { WebhookDeliveryChart } from '@/components/webhooks/WebhookDeliveryChart';
 import { DeliverySearchFilter } from '@/components/webhooks/DeliverySearchFilter';
 import {
+  readDeliveryLogFilters,
   filterDeliveryLogs,
   type DeliveryLogFilters,
-  type DeliveryStatusCategory,
+  updateDeliveryLogUrl,
 } from '@/lib/webhookDeliveryFilter';
 import { JsonPayloadViewer } from '@/components/webhooks/JsonPayloadViewer';
 import { useToast } from '@/components/ui/toast';
@@ -56,22 +57,20 @@ export default function WebhooksPage() {
   const [draftRestored, setDraftRestored] = useState(hasDraft);
 
   const searchParams = useSearchParams();
-  // Normalizes legacy `?status=` values (success/client_error/server_error)
-  // to the HTTP status categories used by DeliverySearchFilter (#674).
-  const initialStatus = (() => {
-    const raw = searchParams.get('status') || 'all';
-    if (raw === 'success') return '2xx';
-    if (raw === 'client_error') return '4xx';
-    if (raw === 'server_error') return '5xx';
-    if (raw === '2xx' || raw === '4xx' || raw === '5xx') return raw;
-    return 'all';
-  })();
-  const [deliveryFilters, setDeliveryFilters] = useState<DeliveryLogFilters>({
-    search: '',
-    statusCategory: initialStatus as DeliveryStatusCategory,
-    eventTopic: searchParams.get('event') || 'all',
-    date: '',
-  });
+  const [deliveryFilters, setDeliveryFilters] = useState<DeliveryLogFilters>(
+    () => readDeliveryLogFilters(searchParams)
+  );
+
+  useEffect(() => {
+    const restoreFiltersFromUrl = () => {
+      setDeliveryFilters(
+        readDeliveryLogFilters(new URLSearchParams(window.location.search))
+      );
+    };
+
+    window.addEventListener('popstate', restoreFiltersFromUrl);
+    return () => window.removeEventListener('popstate', restoreFiltersFromUrl);
+  }, []);
 
   useEffect(() => {
     if (!showForm || editingId || !draftRestored) return;
@@ -270,12 +269,11 @@ is_valid = hmac.compare_digest(signature, hash)`;
   }
 
   function updateDeliveryFilters(next: DeliveryLogFilters) {
-    // Keep deep-linkable `?status=` / `?event=` params in sync so filtered
-    // views remain shareable.
-    const url = new URL(window.location.href);
-    url.searchParams.set('status', next.statusCategory);
-    url.searchParams.set('event', next.eventTopic);
-    window.history.pushState({}, '', url);
+    window.history.pushState(
+      {},
+      '',
+      updateDeliveryLogUrl(window.location.href, next)
+    );
     setDeliveryFilters(next);
   }
 

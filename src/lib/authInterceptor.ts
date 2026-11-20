@@ -1,7 +1,6 @@
 import axios, {
   AxiosError,
   AxiosInstance,
-  AxiosRequestConfig,
   InternalAxiosRequestConfig,
 } from 'axios';
 
@@ -78,6 +77,15 @@ export const setupAuthInterceptor = (
   setAccessToken: (token: string) => void,
   signOut: () => void
 ): (() => void) => {
+  let sessionExpired = false;
+
+  const expireSession = (): void => {
+    if (sessionExpired) return;
+    sessionExpired = true;
+    signOut();
+    redirectToLogin();
+  };
+
   const requestInterceptor = axiosInstance.interceptors.request.use(
     (config: InternalAxiosRequestConfig) => {
       const accessToken = getAccessToken();
@@ -91,7 +99,10 @@ export const setupAuthInterceptor = (
   );
 
   const responseInterceptor = axiosInstance.interceptors.response.use(
-    (response) => response,
+    (response) => {
+      sessionExpired = false;
+      return response;
+    },
 
     async (error: AxiosError) => {
       const originalRequest = error.config as
@@ -103,11 +114,12 @@ export const setupAuthInterceptor = (
 
       const isUnauthorized = error.response?.status === 401;
 
-      if (
-        !isUnauthorized ||
-        originalRequest._retry ||
-        isAuthEndpoint(originalRequest.url)
-      ) {
+      if (!isUnauthorized || isAuthEndpoint(originalRequest.url)) {
+        return Promise.reject(error);
+      }
+
+      if (originalRequest._retry) {
+        expireSession();
         return Promise.reject(error);
       }
 
@@ -125,8 +137,7 @@ export const setupAuthInterceptor = (
           .catch((refreshError) => {
             processQueue(refreshError);
 
-            signOut();
-            redirectToLogin();
+            expireSession();
 
             throw refreshError;
           })

@@ -1,6 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { useState } from 'react';
 import { useConflictDetection } from '@/components/notifications/ConflictNotification';
 import { ConflictNotification } from '@/components/notifications/ConflictNotification';
 import SessionExpiryModal from '@/components/session/SessionExpiryModal';
@@ -17,6 +18,9 @@ export default function ClientShell({
   nonce?: string;
 }) {
   const { conflict, dismiss, refreshContext } = useConflictDetection();
+  const [sessionExpiryOpen, setSessionExpiryOpen] = useState(
+    () => getPendingMutations().length > 0
+  );
   const pendingMutations = getPendingMutations().map((m) => ({
     id: m.id,
     description: m.description,
@@ -53,10 +57,13 @@ export default function ClientShell({
         />
       )}
       <SessionExpiryModal
-        isOpen={pendingMutations.length > 0}
+        isOpen={sessionExpiryOpen}
         pendingMutations={pendingMutations}
         onReauthenticated={clearAllPendingMutations}
-        onDismiss={clearAllPendingMutations}
+        onDismiss={() => {
+          clearAllPendingMutations();
+          setSessionExpiryOpen(false);
+        }}
       />
     </>
   );
