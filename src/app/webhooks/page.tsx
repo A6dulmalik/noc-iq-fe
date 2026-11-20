@@ -19,6 +19,7 @@ import { formatTimestamp } from '@/lib/time';
 import type { Webhook, WebhookDelivery } from '@/types/webhook';
 import { WebhookDeliveryChart } from '@/components/webhooks/WebhookDeliveryChart';
 import { DeliverySearchFilter } from '@/components/webhooks/DeliverySearchFilter';
+import { DeliveryStatusLegend } from '@/components/webhooks/DeliveryStatusLegend';
 import {
   filterDeliveryLogs,
   type DeliveryLogFilters,
@@ -550,6 +551,9 @@ is_valid = hmac.compare_digest(signature, hash)`;
                       totalCount={deliveries.length}
                       resultCount={filteredDeliveries.length}
                     />
+                    {!deliveriesLoading && filteredDeliveries.length > 0 && (
+                      <DeliveryStatusLegend />
+                    )}
                   </div>
                   {deliveriesLoading ? (
                     <p className="text-xs text-gray-400">Loading…</p>
