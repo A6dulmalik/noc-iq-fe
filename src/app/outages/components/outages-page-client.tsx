@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { WifiOff } from 'lucide-react';
 import {
@@ -16,6 +16,8 @@ import { deleteOutage, resolveOutage } from '@/services/outages';
 import { RowActions } from '@/components/tables/RowActions';
 import { SeverityBadge } from '@/components/shared/SeverityBadgeAndShortcuts';
 import SeverityLegend from '@/components/outages/SeverityLegend';
+import { TableStatusPill } from '@/components/outages/TableStatusPill';
+import { useAutoRefresh } from '@/hooks/useAutoRefresh';
 import type {
   Outage as OutageRecord,
   OutageStatus,
@@ -50,6 +52,15 @@ function toOutageRecord(row: Outage): OutageRecord {
     description: '',
     affected_services: [],
   };
+}
+
+/**
+ * Stable React key for an outage row. Using the id (rather than the map index)
+ * keeps a row's DOM node and selection state when the list is reordered or a
+ * different outage is removed.
+ */
+export function getOutageRowKey(outage: Outage): string {
+  return outage.id;
 }
 
 type Props = {
@@ -428,7 +439,8 @@ export default function OutagesPageClient({
           {filteredData.length > 0 ? (
             filteredData.map((item) => (
               <div
-                key={item.id}
+                key={getOutageRowKey(item)}
+                data-outage-id={getOutageRowKey(item)}
                 className="border rounded-lg p-4 flex items-center justify-between"
               >
                 <div className="flex flex-col gap-1">
