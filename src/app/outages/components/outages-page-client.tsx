@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { WifiOff } from 'lucide-react';
+import { SlidersHorizontal, WifiOff } from 'lucide-react';
 import {
   HighlightedText,
   OutageSearchBar,
@@ -111,6 +111,7 @@ export default function OutagesPageClient({
     () => data.filter((item) => !removedIds.includes(item.id)),
     [data, removedIds]
   );
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -341,7 +342,23 @@ export default function OutagesPageClient({
           totalCount={rows.length}
         />
 
-        <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          data-testid="outage-filter-toggle"
+          aria-expanded={filtersOpen}
+          aria-controls="outage-filter-controls"
+          onClick={() => setFiltersOpen((open) => !open)}
+          className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 md:hidden"
+        >
+          <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
+          {filtersOpen ? 'Hide filters' : 'Filters'}
+        </button>
+
+        <div
+          id="outage-filter-controls"
+          data-testid="outage-filter-controls"
+          className={`${filtersOpen ? 'flex' : 'hidden'} flex-wrap items-center gap-2 md:flex`}
+        >
           <TableStatusPill
             updatedAt={lastUpdatedAt}
             isRefreshing={isRefreshing}
