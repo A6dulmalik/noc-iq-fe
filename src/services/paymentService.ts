@@ -245,6 +245,22 @@ export const reconcilePayment = async (
   return normalizePayment(response.data);
 };
 
+export const adminOverridePayment = async (
+  id: string,
+  payload: {
+    maxFeeMultiplier: number;
+    adminPassword: string;
+    note?: string;
+  }
+): Promise<Payment> => {
+  const response = await api.post<unknown>(`/payments/${id}/override`, {
+    max_fee_multiplier: payload.maxFeeMultiplier,
+    admin_password: payload.adminPassword,
+    note: payload.note,
+  });
+  return normalizePayment(response.data);
+};
+
 export const exportPayments = async (
   filters: Omit<PaymentFilters, 'page' | 'page_size'> = {}
 ): Promise<void> => {
@@ -266,5 +282,6 @@ export const PaymentService = {
   fetchPaymentHistory,
   retryPayment,
   reconcilePayment,
+  adminOverridePayment,
   exportPayments,
 };
