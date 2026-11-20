@@ -33,6 +33,7 @@ import {
 } from '@/components/ui/pagination';
 import { queryKeys } from '@/lib/queryKeys';
 import { formatTotal, summarizePayments } from '@/lib/paymentTotals';
+import PaymentAssetBadge from '@/components/payments/PaymentAssetBadge';
 
 type SortDirection = 'asc' | 'desc';
 
@@ -380,7 +381,10 @@ export function PaymentsView() {
                     {new Date(payment.createdAt).toLocaleDateString()}
                   </td>
                   <td className="px-4 py-3 font-medium">
-                    {formatAmount(payment)}
+                    <div className="flex items-center gap-2">
+                      <span>{formatAmount(payment)}</span>
+                      <PaymentAssetBadge assetCode={payment.assetCode} />
+                    </div>
                   </td>
                   <td className="px-4 py-3">
                     <Tooltip>
