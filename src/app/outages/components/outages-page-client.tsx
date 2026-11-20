@@ -534,7 +534,12 @@ export default function OutagesPageClient({
                       label: 'Clear Search',
                       onClick: () => setFilters({ search: '' }),
                     }
-                  : undefined
+                  : isEmptyDataset
+                    ? {
+                        label: 'Log an outage',
+                        onClick: () => router.push('/outages/new'),
+                      }
+                    : undefined
               }
             />
           )}
