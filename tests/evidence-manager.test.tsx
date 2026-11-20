@@ -82,6 +82,14 @@ describe("EvidenceManager", () => {
     }
   });
 
+  it("shows a digest for the canonical evidence manifest", async () => {
+    render(<EvidenceManager evidence={[PNG, PDF]} />);
+
+    expect(
+      await screen.findByText(/Evidence manifest SHA-256:/)
+    ).toBeInTheDocument();
+  });
+
   it("labels each card with its type and size", () => {
     render(<EvidenceManager evidence={[PDF]} />);
 

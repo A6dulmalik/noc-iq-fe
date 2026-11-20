@@ -1,0 +1,174 @@
+'use client';
+
+import { useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { api } from '@/lib/api';
+import usePasswordValidation from '@/hooks/usePasswordValidation';
+import PasswordStrength from '@/components/auth/PasswordStrength';
+import PasswordValidation from '@/components/auth/PasswordValidation';
+
+export default function RegisterPage() {
+  const router = useRouter();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const submitting = useRef(false);
+  const { password_strength, validation_result, isStrong } =
+    usePasswordValidation(password);
+  const passwordsMatch = password === confirm;
+  const hasPasswordErrors =
+    password.length > 0 && !Object.values(validation_result).every(Boolean);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (submitting.current) return;
+    setError(null);
+
+    if (password !== confirm) {
+      setError('Passwords do not match.');
+      return;
+    }
+    if (!isStrong) {
+      setError('Password must meet all five requirements.');
+      return;
+    }
+
+    submitting.current = true;
+    setLoading(true);
+    try {
+      await api.post('/auth/register', { email, password });
+      // Auto-login after registration
+      await api.post('/auth/login', { email, password });
+      router.push('/');
+      router.refresh();
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Registration failed. Please try again.'
+      );
+    } finally {
+      submitting.current = false;
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="mx-auto max-w-sm space-y-6 p-8 pt-16">
+      <div className="space-y-1">
+        <h1 className="text-2xl font-bold text-gray-800">Create account</h1>
+        <p className="text-sm text-gray-500">
+          Register to access the NOC IQ platform.
+        </p>
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="space-y-1">
+          <label
+            htmlFor="email"
+            className="block text-sm font-medium text-gray-700"
+          >
+            Email
+          </label>
+          <input
+            id="email"
+            type="email"
+            required
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          />
+        </div>
+
+        <div className="space-y-1">
+          <label
+            htmlFor="password"
+            className="block text-sm font-medium text-gray-700"
+          >
+            Password
+          </label>
+          <input
+            id="password"
+            type="password"
+            required
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            aria-invalid={hasPasswordErrors ? true : undefined}
+            aria-describedby="password-strength-feedback"
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          />
+          <div
+            id="password-strength-feedback"
+            aria-live="polite"
+            className="text-sm text-gray-500"
+          >
+            <div className="mt-2 space-y-2">
+              <PasswordStrength password_strength={password_strength} />
+              <PasswordValidation validation_result={validation_result} />
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-1">
+          <label
+            htmlFor="confirm"
+            className="block text-sm font-medium text-gray-700"
+          >
+            Confirm password
+          </label>
+          <input
+            id="confirm"
+            type="password"
+            required
+            autoComplete="new-password"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            aria-invalid={
+              confirm.length > 0 && !passwordsMatch ? true : undefined
+            }
+            aria-describedby={
+              confirm.length > 0 && !passwordsMatch
+                ? 'confirm-password-error'
+                : undefined
+            }
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          />
+          {confirm.length > 0 && !passwordsMatch && (
+            <p
+              id="confirm-password-error"
+              className="mt-1 text-sm text-red-600"
+            >
+              Passwords do not match.
+            </p>
+          )}
+        </div>
+
+        {error && (
+          <p className="rounded-lg bg-red-50 px-4 py-2 text-sm text-red-600">
+            {error}
+          </p>
+        )}
+
+        <button
+          type="submit"
+          disabled={loading || !isStrong || !passwordsMatch}
+          className="w-full rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {loading ? 'Creating account…' : 'Create account'}
+        </button>
+      </form>
+
+      <p className="text-center text-sm text-gray-500">
+        Already have an account?{' '}
+        <Link href="/login" className="text-blue-600 hover:underline">
+          Sign in
+        </Link>
+      </p>
+    </div>
+  );
+}

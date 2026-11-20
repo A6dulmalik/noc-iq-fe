@@ -125,22 +125,49 @@ export function formatTimestamp(
   return formatAbsoluteDateTime(value, options);
 }
 
+export interface TimeZoneOptions extends AbsoluteTimeOptions {}
+
 /**
  * Short timezone abbreviation for a timestamp (e.g. "UTC", "GMT+1"), or `null`
- * when the input is invalid. Uses `Intl` so it reflects the runtime zone.
+ * when the input is invalid. Uses `Intl` so it reflects the resolved timezone
+ * (runtime timezone by default) and handles DST transitions for the given date.
  */
 export function getTimeZoneAbbreviation(
   value: unknown,
-  locale?: string
+  localeOrOptions?: string | TimeZoneOptions
 ): string | null {
   const date = parseDate(value);
   if (!date) return null;
+  const options =
+    typeof localeOrOptions === 'string'
+      ? { locale: localeOrOptions }
+      : localeOrOptions ?? {};
+  const { locale, timeZone } = options;
   try {
     const parts = new Intl.DateTimeFormat(locale, {
+      timeZone,
       timeZoneName: 'short',
     }).formatToParts(date);
     return parts.find((p) => p.type === 'timeZoneName')?.value ?? null;
   } catch {
     return null;
   }
+}
+
+/**
+ * Absolute timestamp with the resolved timezone abbreviation appended, e.g.
+ * "10/19/2026, 8:15:00 PM UTC". Uses the user's resolved timezone by default
+ * and remains correct across daylight-saving transitions.
+ */
+export function formatTimestampWithTimeZone(
+  value: unknown,
+  options: AbsoluteTimeOptions = {}
+): string {
+  const formatted = formatTimestamp(value, options);
+  if (formatted === (options.fallback ?? INVALID_TIME_PLACEHOLDER)) {
+    return formatted;
+  }
+  const tz = getTimeZoneAbbreviation(value, options);
+  if (!tz) return formatted;
+  return formatted.includes(tz) ? formatted : `${formatted} ${tz}`;
 }

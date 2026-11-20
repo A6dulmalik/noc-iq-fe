@@ -6,7 +6,9 @@ import {
   filterDeliveryLogs,
   isDeliveryLogFilterActive,
   matchesDeliveryLog,
+  readDeliveryLogFilters,
   statusCategoryOf,
+  updateDeliveryLogUrl,
 } from '@/lib/webhookDeliveryFilter';
 
 const URL = 'https://example.com/hook';
@@ -60,6 +62,43 @@ describe('statusCategoryOf', () => {
 });
 
 describe('delivery log search filter predicate', () => {
+  it('restores URL filters and preserves unrelated query parameters', () => {
+    const restored = readDeliveryLogFilters(
+      new URLSearchParams(
+        'keep=1&search=timeout&status=server_error&event=sla.breached&date=2026-09-03'
+      )
+    );
+    expect(restored).toEqual({
+      search: 'timeout',
+      statusCategory: '5xx',
+      eventTopic: 'sla.breached',
+      date: '2026-09-03',
+    });
+
+    const updatedUrl = updateDeliveryLogUrl(
+      'https://example.com/webhooks?keep=1&status=2xx#history',
+      {
+        ...EMPTY_DELIVERY_LOG_FILTERS,
+        statusCategory: '4xx',
+        eventTopic: 'payment.processed',
+      }
+    );
+    const updated = new globalThis.URL(updatedUrl, 'https://example.com');
+    expect(updated.searchParams.get('keep')).toBe('1');
+    expect(updated.searchParams.get('status')).toBe('4xx');
+    expect(updated.searchParams.get('event')).toBe('payment.processed');
+    expect(updated.hash).toBe('#history');
+  });
+
+  it('removes filter parameters when they are cleared', () => {
+    const updatedUrl = updateDeliveryLogUrl(
+      'https://example.com/webhooks?keep=1&search=old&status=4xx&event=x&date=y',
+      EMPTY_DELIVERY_LOG_FILTERS
+    );
+    const updated = new globalThis.URL(updatedUrl, 'https://example.com');
+    expect(updated.search).toBe('?keep=1');
+  });
+
   it('matches by event (delivery) ID', () => {
     const filters = { ...EMPTY_DELIVERY_LOG_FILTERS, search: 'dlv-client-2' };
     expect(filterDeliveryLogs(LOG, filters, { webhookUrl: URL })).toHaveLength(

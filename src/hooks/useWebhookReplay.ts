@@ -20,6 +20,14 @@ export function useWebhookReplay() {
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['webhooks'] });
+      void qc.invalidateQueries({ queryKey: ['webhook-deliveries'] });
+    },
+    onError: () => {
+      // A replay can fail because the subscription was deleted in another
+      // session. Refresh both collections so a stale row cannot linger with a
+      // false pending state; the table shows the recoverable message.
+      void qc.invalidateQueries({ queryKey: ['webhooks'] });
+      void qc.invalidateQueries({ queryKey: ['webhook-deliveries'] });
     },
   });
 }

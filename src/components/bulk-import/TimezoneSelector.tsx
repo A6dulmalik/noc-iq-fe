@@ -5,6 +5,7 @@
  */
 
 import {
+  AMBIGUOUS_LOCAL_TIME_POLICY,
   SOURCE_TIMEZONES,
   type SourceTimezone,
   previewTimestampConversions,
@@ -25,6 +26,12 @@ const LABELS: Record<SourceTimezone, string> = {
   CET: 'Central Europe (CET, UTC+1)',
   Local: 'Browser local timezone',
 };
+
+function formatOffset(offsetMinutes: number): string {
+  const sign = offsetMinutes < 0 ? '−' : '+';
+  const absolute = Math.abs(offsetMinutes);
+  return `UTC${sign}${String(Math.floor(absolute / 60)).padStart(2, '0')}:${String(absolute % 60).padStart(2, '0')}`;
+}
 
 export function TimezoneSelector({
   value,
@@ -76,7 +83,18 @@ export function TimezoneSelector({
                 {p.error ? (
                   <span className="text-destructive">{p.error}</span>
                 ) : (
-                  <span className="text-foreground">{p.utc}</span>
+                  <span className="text-foreground">
+                    {p.utc}
+                    {p.ambiguous && (
+                      <span className="ml-2 text-amber-700">
+                        Repeated local time; using the{' '}
+                        {AMBIGUOUS_LOCAL_TIME_POLICY} occurrence
+                        {p.selectedOffsetMinutes !== undefined &&
+                          ` (${formatOffset(p.selectedOffsetMinutes)})`}
+                        . The selected instant is {p.utc}.
+                      </span>
+                    )}
+                  </span>
                 )}
               </li>
             ))}

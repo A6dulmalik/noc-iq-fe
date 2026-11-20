@@ -1,12 +1,28 @@
 'use client';
 
 import { useState } from 'react';
-import { useSession } from '@/hooks/useSession';
+import { Monitor } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+
+import { EmptyState } from '@/components/ui/empty-state';
 import { useMutationToast } from '@/hooks/useMutationToast';
+import { useSession } from '@/hooks/useSession';
 import { api } from '@/lib/api';
 
-export function SessionManagementCard() {
+export interface ActiveSession {
+  id: string;
+  label?: string;
+  lastActiveAt?: string;
+}
+
+interface SessionManagementCardProps {
+  /** Sessions other than the current browser session. */
+  otherSessions?: ActiveSession[];
+}
+
+export function SessionManagementCard({
+  otherSessions = [],
+}: SessionManagementCardProps) {
   const { state: sessionState, logout } = useSession();
   const router = useRouter();
   const [sessionActionLoading, setSessionActionLoading] = useState<
@@ -66,6 +82,38 @@ export function SessionManagementCard() {
       <p className="mt-1 text-sm text-slate-500">
         Control your active session and understand token refresh behaviour.
       </p>
+
+      <div className="mt-4 space-y-3">
+        <h3 className="text-sm font-medium text-slate-900">
+          Other active sessions
+        </h3>
+        {otherSessions.length === 0 ? (
+          <EmptyState
+            icon={Monitor}
+            title="Only your current session is active"
+            description="No other devices or browsers are signed in to this account."
+            className="p-6"
+          />
+        ) : (
+          <ul className="space-y-2">
+            {otherSessions.map((session) => (
+              <li
+                key={session.id}
+                className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 text-sm text-slate-700"
+              >
+                <p className="font-medium text-slate-900">
+                  {session.label ?? 'Active session'}
+                </p>
+                {session.lastActiveAt ? (
+                  <p className="mt-0.5 text-slate-500">
+                    Last active {session.lastActiveAt}
+                  </p>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
         <div className="rounded-xl border border-slate-100 bg-slate-50 p-4 text-sm space-y-3">

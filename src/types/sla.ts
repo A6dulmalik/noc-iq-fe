@@ -109,6 +109,8 @@ export interface DisputeEvidence {
   content_type: string;
   /** Location to preview or download from. */
   url: string;
+  /** SHA-256 of the uploaded file contents, when supplied by the server. */
+  content_hash?: string;
   size_bytes?: number;
   uploaded_at?: string;
 }

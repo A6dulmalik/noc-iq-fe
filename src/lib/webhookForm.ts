@@ -10,6 +10,8 @@
  * Closes #663 — webhook endpoint registration modal.
  */
 
+import { isLoopbackHostname } from '@/lib/destinationSafety';
+
 export const WEBHOOK_TOPICS = [
   { value: 'outage.created', label: 'Outage created' },
   { value: 'outage.resolved', label: 'Outage resolved' },
@@ -36,6 +38,8 @@ export type WebhookFieldErrors = Partial<Record<keyof WebhookFormValues, string>
 export const WEBHOOK_URL_ERROR = 'Enter a valid http:// or https:// URL';
 export const WEBHOOK_HTTPS_ERROR =
   'Production endpoints must use HTTPS so payloads and signatures are encrypted in transit';
+export const WEBHOOK_CREDENTIALS_ERROR =
+  'Endpoint URL must not contain embedded credentials';
 export const WEBHOOK_SECRET_ERROR =
   'Secret must be at least 16 characters and use only letters, digits, - and _';
 export const WEBHOOK_TOPICS_ERROR = 'Select at least one event topic';
@@ -54,10 +58,8 @@ function parseUrl(value: string): URL | null {
 
 /** True when the URL resolves to a loopback, link-local, or private address. */
 export function isPrivateHost(hostname: string): boolean {
-  const host = hostname.toLowerCase();
-  if (host === 'localhost' || host.endsWith('.localhost') || host === '::1') {
-    return true;
-  }
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (isLoopbackHostname(host)) return true;
   // IPv4 loopback and RFC 1918 / link-local ranges.
   const ipv4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
   if (ipv4) {
@@ -95,6 +97,8 @@ export function validateWebhookForm(
   const url = parseUrl(values.url);
   if (!url) {
     errors.url = WEBHOOK_URL_ERROR;
+  } else if (url.username || url.password) {
+    errors.url = WEBHOOK_CREDENTIALS_ERROR;
   } else {
     if (url.protocol !== 'https:' && url.protocol !== 'http:') {
       errors.url = WEBHOOK_URL_ERROR;

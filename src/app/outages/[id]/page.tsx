@@ -24,7 +24,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { announce } from '@/hooks/useOutageRealtime';
-import { formatRelativeTime, formatTimestamp } from '@/lib/time';
+import { formatTimestampWithTimeZone } from '@/lib/time';
 import {
   getSlaAmountTooltip,
   getSlaRatingTooltip,
@@ -493,27 +493,16 @@ export default function OutageDetailsPage() {
           <CardContent className="space-y-3 text-sm">
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Started At</span>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span
-                    tabIndex={0}
-                    className="font-medium outline-none focus-visible:underline"
-                    aria-label={`Detected ${formatTimestamp(outage.detected_at)}`}
-                  >
-                    {formatRelativeTime(outage.detected_at)}
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent side="top">
-                  {formatTimestamp(outage.detected_at)}
-                </TooltipContent>
-              </Tooltip>
+              <span className="font-medium">
+                {formatTimestampWithTimeZone(outage.detected_at)}
+              </span>
             </div>
             <Separator />
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Resolved At</span>
               <span className="font-medium">
                 {outage.resolved_at
-                  ? new Date(outage.resolved_at).toLocaleString()
+                  ? formatTimestampWithTimeZone(outage.resolved_at)
                   : 'Ongoing'}
               </span>
             </div>
@@ -664,7 +653,7 @@ export default function OutageDetailsPage() {
                       {event.label}
                     </p>
                     <p className="text-xs text-slate-500">
-                      {formatTimestamp(event.time)}
+                      {formatTimestampWithTimeZone(event.time)}
                     </p>
                     {event.note && (
                       <p className="mt-0.5 text-xs text-slate-400">

@@ -1,15 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { Settings } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-state';
 import {
   RouteErrorState,
   RouteLoadingState,
 } from '@/components/ui/route-state';
-import { EmptyState } from '@/components/ui/empty-state';
-import { Settings } from 'lucide-react';
+import { useToast } from '@/components/ui/toast';
 import { api } from '@/lib/api';
 import {
   getBoundsHint,
@@ -17,6 +18,7 @@ import {
   validateSlaConfig,
   type SlaBoundKey,
 } from '@/lib/slaBounds';
+import { formatTimestamp } from '@/lib/time';
 
 type Severity = 'critical' | 'high' | 'medium' | 'low';
 
@@ -106,6 +108,7 @@ function SlaNumberField({
 }
 
 export default function SlaConfigPage() {
+  const toast = useToast();
   const [configs, setConfigs] = useState<EditableConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -114,6 +117,7 @@ export default function SlaConfigPage() {
   );
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [formData, setFormData] = useState<SLASeverityConfig>({
     threshold_minutes: 0,
     penalty_per_minute: 0,
@@ -222,6 +226,8 @@ export default function SlaConfigPage() {
             : config
         )
       );
+      setLastSavedAt(new Date().toISOString());
+      toast('SLA configuration saved successfully.', 'success');
       setEditingConfig(null);
     } catch (issue) {
       setSaveError(getErrorMessage(issue));
@@ -260,7 +266,17 @@ export default function SlaConfigPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Severity Service Level Agreements</CardTitle>
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <CardTitle>Severity Service Level Agreements</CardTitle>
+            {lastSavedAt ? (
+              <p
+                data-testid="sla-config-last-saved"
+                className="text-sm text-muted-foreground"
+              >
+                Last saved: {formatTimestamp(lastSavedAt)}
+              </p>
+            ) : null}
+          </div>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">

@@ -21,6 +21,56 @@ export const EMPTY_DELIVERY_LOG_FILTERS: DeliveryLogFilters = {
   date: '',
 };
 
+export function readDeliveryLogFilters(
+  params: Pick<URLSearchParams, 'get'>
+): DeliveryLogFilters {
+  const status = params.get('status') ?? 'all';
+  const statusCategory: DeliveryStatusCategory =
+    status === 'success'
+      ? '2xx'
+      : status === 'client_error'
+        ? '4xx'
+        : status === 'server_error'
+          ? '5xx'
+          : status === '2xx' || status === '4xx' || status === '5xx'
+            ? status
+            : 'all';
+
+  return {
+    search: params.get('search') ?? '',
+    statusCategory,
+    eventTopic: params.get('event') ?? 'all',
+    date: params.get('date') ?? '',
+  };
+}
+
+export function updateDeliveryLogUrl(
+  currentUrl: string,
+  filters: DeliveryLogFilters
+): string {
+  const url = new URL(currentUrl);
+  const filterParams: Array<[keyof DeliveryLogFilters, string, string]> = [
+    ['search', 'search', filters.search],
+    ['statusCategory', 'status', filters.statusCategory],
+    ['eventTopic', 'event', filters.eventTopic],
+    ['date', 'date', filters.date],
+  ];
+
+  for (const [filter, param, value] of filterParams) {
+    const isDefault =
+      (filter === 'statusCategory' && value === 'all') ||
+      (filter === 'eventTopic' && value === 'all') ||
+      value === '';
+    if (isDefault) {
+      url.searchParams.delete(param);
+    } else {
+      url.searchParams.set(param, value);
+    }
+  }
+
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
 export function isDeliveryLogFilterActive(
   filters: DeliveryLogFilters
 ): boolean {

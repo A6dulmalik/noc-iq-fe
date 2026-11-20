@@ -19,14 +19,17 @@ import { formatTimestamp } from '@/lib/time';
 import type { Webhook, WebhookDelivery } from '@/types/webhook';
 import { WebhookDeliveryChart } from '@/components/webhooks/WebhookDeliveryChart';
 import { DeliverySearchFilter } from '@/components/webhooks/DeliverySearchFilter';
+import { DeliveryStatusLegend } from '@/components/webhooks/DeliveryStatusLegend';
 import {
+  readDeliveryLogFilters,
   filterDeliveryLogs,
   type DeliveryLogFilters,
-  type DeliveryStatusCategory,
+  updateDeliveryLogUrl,
 } from '@/lib/webhookDeliveryFilter';
 import { JsonPayloadViewer } from '@/components/webhooks/JsonPayloadViewer';
 import { useToast } from '@/components/ui/toast';
 import { RotateSecretModal } from '@/components/webhooks/RotateSecretModal';
+import { validateWebhookForm } from '@/lib/webhookForm';
 
 const AVAILABLE_EVENTS = [
   'outage.created',
@@ -55,22 +58,20 @@ export default function WebhooksPage() {
   const [draftRestored, setDraftRestored] = useState(hasDraft);
 
   const searchParams = useSearchParams();
-  // Normalizes legacy `?status=` values (success/client_error/server_error)
-  // to the HTTP status categories used by DeliverySearchFilter (#674).
-  const initialStatus = (() => {
-    const raw = searchParams.get('status') || 'all';
-    if (raw === 'success') return '2xx';
-    if (raw === 'client_error') return '4xx';
-    if (raw === 'server_error') return '5xx';
-    if (raw === '2xx' || raw === '4xx' || raw === '5xx') return raw;
-    return 'all';
-  })();
-  const [deliveryFilters, setDeliveryFilters] = useState<DeliveryLogFilters>({
-    search: '',
-    statusCategory: initialStatus as DeliveryStatusCategory,
-    eventTopic: searchParams.get('event') || 'all',
-    date: '',
-  });
+  const [deliveryFilters, setDeliveryFilters] = useState<DeliveryLogFilters>(
+    () => readDeliveryLogFilters(searchParams)
+  );
+
+  useEffect(() => {
+    const restoreFiltersFromUrl = () => {
+      setDeliveryFilters(
+        readDeliveryLogFilters(new URLSearchParams(window.location.search))
+      );
+    };
+
+    window.addEventListener('popstate', restoreFiltersFromUrl);
+    return () => window.removeEventListener('popstate', restoreFiltersFromUrl);
+  }, []);
 
   useEffect(() => {
     if (!showForm || editingId || !draftRestored) return;
@@ -269,12 +270,11 @@ is_valid = hmac.compare_digest(signature, hash)`;
   }
 
   function updateDeliveryFilters(next: DeliveryLogFilters) {
-    // Keep deep-linkable `?status=` / `?event=` params in sync so filtered
-    // views remain shareable.
-    const url = new URL(window.location.href);
-    url.searchParams.set('status', next.statusCategory);
-    url.searchParams.set('event', next.eventTopic);
-    window.history.pushState({}, '', url);
+    window.history.pushState(
+      {},
+      '',
+      updateDeliveryLogUrl(window.location.href, next)
+    );
     setDeliveryFilters(next);
   }
 
@@ -287,8 +287,14 @@ is_valid = hmac.compare_digest(signature, hash)`;
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setFormError(null);
-    if (!formUrl) {
-      setFormError('URL is required.');
+    const urlError = validateWebhookForm({
+      url: formUrl,
+      description: '',
+      secret: '',
+      topics: formEvents,
+    }).url;
+    if (urlError) {
+      setFormError(urlError);
       return;
     }
     if (formEvents.length === 0) {
@@ -304,6 +310,21 @@ is_valid = hmac.compare_digest(signature, hash)`;
     } else {
       createMutation.mutate({ url: formUrl, events: formEvents });
     }
+  }
+
+  function handleTestConnection() {
+    const urlError = validateWebhookForm({
+      url: formUrl,
+      description: '',
+      secret: '',
+      topics: ['outage.created'],
+    }).url;
+    if (urlError) {
+      setFormError(urlError);
+      return;
+    }
+    setFormError(null);
+    testConnectionMutation.mutate(formUrl);
   }
 
   const isSaving = createMutation.isPending || updateMutation.isPending;
@@ -368,7 +389,7 @@ is_valid = hmac.compare_digest(signature, hash)`;
               />
               <button
                 type="button"
-                onClick={() => testConnectionMutation.mutate(formUrl)}
+                onClick={handleTestConnection}
                 disabled={!formUrl || testConnectionMutation.isPending}
                 className="shrink-0 rounded-lg border px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-40"
               >
@@ -550,6 +571,9 @@ is_valid = hmac.compare_digest(signature, hash)`;
                       totalCount={deliveries.length}
                       resultCount={filteredDeliveries.length}
                     />
+                    {!deliveriesLoading && filteredDeliveries.length > 0 && (
+                      <DeliveryStatusLegend />
+                    )}
                   </div>
                   {deliveriesLoading ? (
                     <p className="text-xs text-gray-400">Loading…</p>

@@ -10,12 +10,23 @@
 import { useCallback, useMemo, useState } from 'react';
 
 import type { ImportValidationError } from '@/types/bulkImport';
+import {
+  convertTimestampToUtc,
+  type SourceTimezone,
+} from '@/lib/timezoneConvert';
 
 const REQUIRED_FIELDS = ['service_id', 'start_time', 'end_time'] as const;
 
-function isValidDate(dateString: string): boolean {
-  const d = new Date(dateString);
-  return d instanceof Date && !isNaN(d.getTime());
+function parseTimestamp(
+  dateString: string,
+  sourceTimezone: SourceTimezone
+): Date | null {
+  try {
+    const date = new Date(convertTimestampToUtc(dateString, sourceTimezone));
+    return Number.isNaN(date.getTime()) ? null : date;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -27,7 +38,8 @@ export function revalidateCell(
   rows: string[][],
   rowIndex: number,
   field: string,
-  value: string
+  value: string,
+  sourceTimezone: SourceTimezone = 'UTC'
 ): ImportValidationError[] {
   const errors: ImportValidationError[] = [];
   const sheetRow = rowIndex + 2;
@@ -47,7 +59,7 @@ export function revalidateCell(
   if (
     (field === 'start_time' || field === 'end_time') &&
     trimmed !== '' &&
-    !isValidDate(trimmed)
+    !parseTimestamp(trimmed, sourceTimezone)
   ) {
     errors.push({
       row: sheetRow,
@@ -65,12 +77,14 @@ export function revalidateCell(
         field === 'start_time' ? trimmed : (rows[rowIndex]?.[startIdx] ?? '');
       const endVal =
         field === 'end_time' ? trimmed : (rows[rowIndex]?.[endIdx] ?? '');
+      const startDate = parseTimestamp(startVal, sourceTimezone);
+      const endDate = parseTimestamp(endVal, sourceTimezone);
       if (
         startVal &&
         endVal &&
-        isValidDate(startVal) &&
-        isValidDate(endVal) &&
-        new Date(startVal) >= new Date(endVal)
+        startDate &&
+        endDate &&
+        startDate >= endDate
       ) {
         errors.push({
           row: sheetRow,
@@ -94,7 +108,8 @@ export function applyCellEdit(
   errors: ImportValidationError[],
   rowIndex: number,
   field: string,
-  value: string
+  value: string,
+  sourceTimezone: SourceTimezone = 'UTC'
 ): { rows: string[][]; errors: ImportValidationError[] } {
   const colIndex = headers.indexOf(field);
   if (colIndex < 0 || rowIndex < 0 || rowIndex >= rows.length) {
@@ -116,7 +131,14 @@ export function applyCellEdit(
       )
   );
 
-  const cellErrors = revalidateCell(headers, nextRows, rowIndex, field, value);
+  const cellErrors = revalidateCell(
+    headers,
+    nextRows,
+    rowIndex,
+    field,
+    value,
+    sourceTimezone
+  );
   return { rows: nextRows, errors: [...retained, ...cellErrors] };
 }
 
@@ -133,6 +155,7 @@ export interface ValidationPreviewProps {
   headers: string[];
   rows: string[][];
   errors: ImportValidationError[];
+  sourceTimezone?: SourceTimezone;
   /** Rows marked excluded (e.g. duplicates) – shown muted */
   excludedRowIndexes?: Set<number>;
   onRowsChange: (rows: string[][]) => void;
@@ -143,6 +166,7 @@ export function ValidationPreview({
   headers,
   rows,
   errors,
+  sourceTimezone = 'UTC',
   excludedRowIndexes,
   onRowsChange,
   onErrorsChange,
@@ -168,12 +192,22 @@ export function ValidationPreview({
       errors,
       rowIndex,
       field,
-      draft
+      draft,
+      sourceTimezone
     );
     onRowsChange(result.rows);
     onErrorsChange(result.errors);
     setEditing(null);
-  }, [editing, draft, headers, rows, errors, onRowsChange, onErrorsChange]);
+  }, [
+    editing,
+    draft,
+    headers,
+    rows,
+    errors,
+    sourceTimezone,
+    onRowsChange,
+    onErrorsChange,
+  ]);
 
   const cancelEdit = useCallback(() => {
     setEditing(null);

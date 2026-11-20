@@ -75,6 +75,19 @@ describe('toDisbursementRow', () => {
     expect(row.explorerUrl).toBe('https://example.com/tx/1');
   });
 
+  it('falls back to a trusted explorer when the backend URL is unsafe', () => {
+    const row = toDisbursementRow(
+      makePayment({
+        explorerUrl: 'https://alice:secret@example.com/tx/1',
+      })
+    );
+
+    expect(row.explorerUrl).toBe(
+      `https://stellar.expert/explorer/testnet/tx/${TX_HASH}`
+    );
+    expect(row.explorerUrl).not.toContain('secret');
+  });
+
   it('falls back to the recipient account link without a transaction hash', () => {
     const row = toDisbursementRow(makePayment({ transactionHash: null }));
     expect(row.txHash).toBeNull();

@@ -98,6 +98,21 @@ describe('MetricCard', () => {
     expect(screen.getByTestId('metric-trend')).toHaveTextContent('▼');
   });
 
+  it('shows comparison line when baseline exists and hides no-baseline helper', () => {
+    render(
+      <MetricCard
+        title="MTTR"
+        value="30m"
+        changePercentage={-25}
+        trend="improving"
+        comparison="-25.0% vs previous cycle"
+      />
+    );
+
+    expect(screen.getByText('-25.0% vs previous cycle')).toBeInTheDocument();
+    expect(screen.queryByText('No comparison data')).not.toBeInTheDocument();
+  });
+
   it('reports an unchanged value as flat with a neutral marker', () => {
     render(
       <MetricCard
@@ -130,6 +145,13 @@ describe('MetricCard', () => {
     expect(trend).toHaveAttribute('data-trend', 'unknown');
     expect(trend).toHaveTextContent('No comparison');
     expect(trend).toHaveTextContent('—');
+
+    const helper = screen.getByText('No comparison data');
+    expect(helper).toBeInTheDocument();
+    expect(helper).toHaveClass('text-gray-400');
+    expect(
+      screen.queryByText('No prior cycle to compare')
+    ).not.toBeInTheDocument();
   });
 
   it('omits the detail line when none is supplied', () => {

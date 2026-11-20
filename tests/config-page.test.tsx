@@ -3,6 +3,7 @@ import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import SlaConfigPage from '@/app/config/page';
+import { ToastProvider } from '@/components/ui/toast';
 
 const mockGet = vi.fn();
 const mockPut = vi.fn();
@@ -13,6 +14,14 @@ vi.mock('@/lib/api', () => ({
     put: (...args: unknown[]) => mockPut(...args),
   },
 }));
+
+function renderPage() {
+  render(
+    <ToastProvider>
+      <SlaConfigPage />
+    </ToastProvider>
+  );
+}
 
 describe('SLA config page', () => {
   beforeEach(() => {
@@ -43,7 +52,7 @@ describe('SLA config page', () => {
       },
     });
 
-    render(<SlaConfigPage />);
+    renderPage();
 
     expect(
       await screen.findByText('Severity Service Level Agreements')
@@ -57,10 +66,10 @@ describe('SLA config page', () => {
     const rewardInput = screen.getByLabelText('Reward Base');
 
     fireEvent.change(rewardInput, { target: { value: '-10' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
     expect(
-      await screen.findByText('Values cannot be negative.')
+      await screen.findByTestId('sla-reward-base-error')
     ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
     expect(mockPut).not.toHaveBeenCalled();
 
     fireEvent.change(thresholdInput, { target: { value: '45' } });
@@ -77,5 +86,53 @@ describe('SLA config page', () => {
 
     expect(await screen.findByText('45')).toBeInTheDocument();
     expect(screen.getByText('200')).toBeInTheDocument();
+  });
+
+  it('shows success feedback on save and no toast on failure', async () => {
+    mockGet.mockResolvedValue({
+      data: {
+        critical: {
+          threshold_minutes: 30,
+          penalty_per_minute: 10,
+          reward_base: 150,
+        },
+      },
+    });
+    mockPut
+      .mockRejectedValueOnce(new Error('save failed'))
+      .mockResolvedValueOnce({
+        data: {
+          threshold_minutes: 35,
+          penalty_per_minute: 10,
+          reward_base: 150,
+        },
+      });
+
+    renderPage();
+
+    expect(
+      await screen.findByText('Severity Service Level Agreements')
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    fireEvent.change(screen.getByLabelText('Threshold (minutes)'), {
+      target: { value: '35' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
+
+    expect(await screen.findByText('save failed')).toBeInTheDocument();
+    expect(
+      screen.queryByText('SLA configuration saved successfully.')
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId('sla-config-last-saved')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
+
+    expect(
+      await screen.findByText('SLA configuration saved successfully.')
+    ).toBeInTheDocument();
+    expect(screen.getByTestId('sla-config-last-saved')).toHaveTextContent(
+      'Last saved:'
+    );
   });
 });
