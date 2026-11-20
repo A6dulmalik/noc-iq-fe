@@ -84,7 +84,11 @@ export default function MetricCard({
         </span>
       </div>
 
-      <p className={`mt-2 text-xs ${style.text}`}>{comparison}</p>
+      {changePercentage === null ? (
+        <p className="mt-2 text-xs text-gray-400">No comparison data</p>
+      ) : (
+        <p className={`mt-2 text-xs ${style.text}`}>{comparison}</p>
+      )}
 
       {detail ? <p className="mt-1 text-xs text-gray-400">{detail}</p> : null}
     </div>

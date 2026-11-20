@@ -5,6 +5,13 @@ import { useMemo } from 'react';
 import { useUrlSync } from '@/hooks/useUrlSync';
 import { PaymentService } from '@/services/paymentService';
 import type { Payment } from '@/types/payment';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { getPaymentStatusTooltip } from '@/lib/paymentStatusTooltip';
 import { useQuery } from '@tanstack/react-query';
 import { PaymentDetailDrawer } from './payment-detail-drawer';
 
@@ -26,6 +33,7 @@ import {
 } from '@/components/ui/pagination';
 import { queryKeys } from '@/lib/queryKeys';
 import { formatTotal, summarizePayments } from '@/lib/paymentTotals';
+import PaymentAssetBadge from '@/components/payments/PaymentAssetBadge';
 
 type SortDirection = 'asc' | 'desc';
 
@@ -207,10 +215,11 @@ export function PaymentsView() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold">Payments</h1>
+    <TooltipProvider>
+      <div className="space-y-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold">Payments</h1>
           <span
             className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs font-medium text-slate-600"
             title="Stellar network context for this view"
@@ -372,14 +381,26 @@ export function PaymentsView() {
                     {new Date(payment.createdAt).toLocaleDateString()}
                   </td>
                   <td className="px-4 py-3 font-medium">
-                    {formatAmount(payment)}
+                    <div className="flex items-center gap-2">
+                      <span>{formatAmount(payment)}</span>
+                      <PaymentAssetBadge assetCode={payment.assetCode} />
+                    </div>
                   </td>
                   <td className="px-4 py-3">
-                    <span
-                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${getStatusBadge(payment.status)}`}
-                    >
-                      {payment.status}
-                    </span>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span
+                          tabIndex={0}
+                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 ${getStatusBadge(payment.status)}`}
+                          aria-label={`${payment.status}: ${getPaymentStatusTooltip(payment.status)}`}
+                        >
+                          {payment.status}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent side="top">
+                        {getPaymentStatusTooltip(payment.status)}
+                      </TooltipContent>
+                    </Tooltip>
                   </td>
                   <td className="px-4 py-3 text-gray-600">
                     {payment.type ?? 'N/A'}
@@ -494,7 +515,8 @@ export function PaymentsView() {
           onClose={handleCloseDrawer}
         />
       )}
-    </div>
+      </div>
+    </TooltipProvider>
   );
 }
 

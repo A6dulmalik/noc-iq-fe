@@ -7,6 +7,8 @@
 
 export type SourceTimezone = 'UTC' | 'EST' | 'PST' | 'CET' | 'Local';
 
+export const AMBIGUOUS_LOCAL_TIME_POLICY = 'earlier' as const;
+
 /** Fixed offsets from UTC in minutes (standard time; no DST for simplicity). */
 export const TIMEZONE_OFFSETS_MINUTES: Record<Exclude<SourceTimezone, 'Local'>, number> = {
   UTC: 0,
@@ -41,8 +43,21 @@ export function convertTimestampToUtc(
   value: string,
   sourceTz: SourceTimezone,
 ): string {
+  return resolveTimestamp(value, sourceTz).utc;
+}
+
+interface ResolvedTimestamp {
+  utc: string;
+  selectedOffsetMinutes?: number;
+  ambiguous?: boolean;
+}
+
+function resolveTimestamp(
+  value: string,
+  sourceTz: SourceTimezone,
+): ResolvedTimestamp {
   const trimmed = value.trim();
-  if (!trimmed) return trimmed;
+  if (!trimmed) return { utc: trimmed };
 
   // Already has explicit Z or offset — leave as-is (normalize to ISO).
   if (/[zZ]$/.test(trimmed) || /[+-]\d{2}:\d{2}$/.test(trimmed)) {
@@ -50,7 +65,7 @@ export function convertTimestampToUtc(
     if (Number.isNaN(d.getTime())) {
       throw new Error(`Invalid timestamp: ${value}`);
     }
-    return d.toISOString();
+    return { utc: d.toISOString() };
   }
 
   const normalized = trimmed.replace(' ', 'T');
@@ -69,16 +84,78 @@ export function convertTimestampToUtc(
   const minute = Number(mins);
   const second = Number(ss);
 
-  // Interpret components as UTC then subtract source offset.
+  // Use UTC as a timezone-neutral representation of the wall-clock fields.
   const asUtc = Date.UTC(year, month - 1, day, hour, minute, second);
+  if (sourceTz === 'Local') {
+    const matches = getLocalWallTimeCandidates(asUtc, {
+      year,
+      month: month - 1,
+      day,
+      hour,
+      minute,
+      second,
+    });
+    if (matches.length > 0) {
+      const chosen = matches[0];
+      return {
+        utc: new Date(chosen.utcMs).toISOString(),
+        selectedOffsetMinutes: chosen.offsetMinutes,
+        ambiguous: matches.length > 1,
+      };
+    }
+  }
+
   const offsetMin = getOffsetMinutes(sourceTz, new Date(asUtc));
   const utcMs = asUtc - offsetMin * 60_000;
-  return new Date(utcMs).toISOString();
+  return {
+    utc: new Date(utcMs).toISOString(),
+    selectedOffsetMinutes: offsetMin,
+    ambiguous: false,
+  };
+}
+
+function getLocalWallTimeCandidates(
+  wallTimeMs: number,
+  components: {
+    year: number;
+    month: number;
+    day: number;
+    hour: number;
+    minute: number;
+    second: number;
+  }
+): Array<{ utcMs: number; offsetMinutes: number }> {
+  const offsets = new Set<number>();
+  for (const hours of [-36, -24, -12, 0, 12, 24, 36]) {
+    offsets.add(
+      getOffsetMinutes('Local', new Date(wallTimeMs + hours * 60 * 60_000))
+    );
+  }
+
+  return [...offsets]
+    .map((offsetMinutes) => ({
+      utcMs: wallTimeMs - offsetMinutes * 60_000,
+      offsetMinutes,
+    }))
+    .filter(({ utcMs }) => {
+      const candidate = new Date(utcMs);
+      return (
+        candidate.getFullYear() === components.year &&
+        candidate.getMonth() === components.month &&
+        candidate.getDate() === components.day &&
+        candidate.getHours() === components.hour &&
+        candidate.getMinutes() === components.minute &&
+        candidate.getSeconds() === components.second
+      );
+    })
+    .sort((a, b) => a.utcMs - b.utcMs);
 }
 
 export interface TimestampPreview {
   original: string;
   utc: string;
+  selectedOffsetMinutes?: number;
+  ambiguous?: boolean;
   error?: string;
 }
 
@@ -88,7 +165,7 @@ export function previewTimestampConversions(
 ): TimestampPreview[] {
   return values.map((original) => {
     try {
-      return { original, utc: convertTimestampToUtc(original, sourceTz) };
+      return { original, ...resolveTimestamp(original, sourceTz) };
     } catch (err) {
       return {
         original,

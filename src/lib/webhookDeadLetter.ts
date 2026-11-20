@@ -118,6 +118,51 @@ export function getBatchActionState(
   };
 }
 
+/**
+ * True when an API failure means the delivery's subscription no longer exists.
+ *
+ * A replay can race with a subscription deletion in another session: the
+ * delivery row is still in the dead-letter queue, but the endpoint it belonged
+ * to has already gone. Treating that as a normal retry failure leaves a false
+ * pending row in the UI forever, so callers need to distinguish it.
+ */
+export function isStaleSubscriptionError(error: unknown): boolean {
+  const status = (error as { response?: { status?: unknown } })?.response?.status;
+  if (status === 404 || status === 410) return true;
+
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === 'string'
+        ? error
+        : '';
+  return /subscription.*(deleted|not found|gone|missing)|delivery.*not found/i.test(
+    message
+  );
+}
+
+/** Recoverable copy for a replay failure, safe to show in a live region. */
+export function getReplayStatusMessage(error: unknown): string {
+  if (isStaleSubscriptionError(error)) {
+    return 'This webhook subscription no longer exists. The stale deliveries were removed; refresh the list to see the current state.';
+  }
+  return 'Replay failed. The deliveries are still available — check the endpoint and try again.';
+}
+
+/**
+ * Drops deliveries from a local list after their subscription was deleted.
+ * Returns the original array when no ids match so callers can skip a render.
+ */
+export function removeDeadLetterItems(
+  deliveries: WebhookDelivery[],
+  ids: readonly string[]
+): WebhookDelivery[] {
+  if (ids.length === 0) return deliveries;
+  const removed = new Set(ids);
+  const next = deliveries.filter((delivery) => !removed.has(delivery.id));
+  return next.length === deliveries.length ? deliveries : next;
+}
+
 /** Formats the time a dispatch was last attempted. */
 export function formatAttemptTime(iso: string | null | undefined): string {
   if (!iso) return '—';

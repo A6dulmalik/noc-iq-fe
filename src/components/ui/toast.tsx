@@ -135,7 +135,12 @@ const ToastContext = createContext<ToastContextValue | null>(null);
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [announcement, setAnnouncement] = useState('');
   const counter = useRef(0);
+  const lastAnnounced = useRef('');
+  const announcementReset = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined
+  );
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const markAllAsRead = useCallback(() => {
     setNotifications((items) => items.map((item) => ({ ...item, read: true })));
@@ -145,9 +150,17 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     const clear = () => {
       setNotifications([]);
       setToasts([]);
+      setAnnouncement('');
+      lastAnnounced.current = '';
     };
     window.addEventListener('auth:logout', clear);
     return () => window.removeEventListener('auth:logout', clear);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      clearTimeout(announcementReset.current);
+    };
   }, []);
 
   const toast = useCallback(
@@ -157,6 +170,21 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       setNotifications((prev) =>
         [{ id, message, variant, read: false }, ...prev].slice(0, 50)
       );
+
+      // Route toast confirmations through a dedicated polite live region so
+      // screen readers announce them once, including success and error toasts.
+      // Identical consecutive messages are treated as duplicate announcements.
+      if (message !== lastAnnounced.current) {
+        lastAnnounced.current = message;
+        // Clear first so the same text announced again later is still spoken.
+        setAnnouncement('');
+        queueMicrotask(() => setAnnouncement(message));
+        clearTimeout(announcementReset.current);
+        announcementReset.current = setTimeout(() => {
+          lastAnnounced.current = '';
+          setAnnouncement('');
+        }, DURATION);
+      }
     },
     []
   );
@@ -169,8 +197,16 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     <ToastContext.Provider value={{ toast, notifications, markAllAsRead }}>
       {children}
       <div
-        role="region"
+        data-testid="toast-announcer"
+        role="status"
         aria-live="polite"
+        aria-atomic="true"
+        className="sr-only"
+      >
+        {announcement}
+      </div>
+      <div
+        role="region"
         aria-label="Notifications"
         className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2"
       >

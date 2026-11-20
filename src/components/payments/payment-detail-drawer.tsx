@@ -10,7 +10,15 @@ import type { PaginatedPayments, Payment } from '@/types/payment';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ExternalLink, RefreshCcw, Scale, X } from 'lucide-react';
 import { explorerLink, STELLAR_NETWORK_LABEL } from '@/lib/explorer';
+import { getSafeExternalUrl } from '@/lib/destinationSafety';
 import { queryKeys } from '@/lib/queryKeys';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { getPaymentStatusTooltip } from '@/lib/paymentStatusTooltip';
 
 interface PaymentDetailDrawerProps {
   paymentId: string | null;
@@ -196,20 +204,21 @@ export function PaymentDetailDrawer({
   const visibleHistory = showFullHistory ? history : history.slice(0, 6);
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
-      <div
-        className="absolute inset-0 bg-black/30"
-        onClick={onClose}
-        aria-hidden="true"
-      />
-      <div
-        ref={drawerRef}
-        className="relative flex w-full max-w-xl flex-col bg-white p-6 shadow-xl transition-transform"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="drawer-title"
-        tabIndex={-1}
-      >
+    <TooltipProvider>
+      <div className="fixed inset-0 z-50 flex justify-end">
+        <div
+          className="absolute inset-0 bg-black/30"
+          onClick={onClose}
+          aria-hidden="true"
+        />
+        <div
+          ref={drawerRef}
+          className="relative flex w-full max-w-xl flex-col bg-white p-6 shadow-xl transition-transform"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="drawer-title"
+          tabIndex={-1}
+        >
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <h2 id="drawer-title" className="text-lg font-semibold">
@@ -241,11 +250,20 @@ export function PaymentDetailDrawer({
                 <p className="font-mono text-sm text-slate-800">{payment.id}</p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <span
-                  className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${getStatusBadge(payment.status)}`}
-                >
-                  {payment.status}
-                </span>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span
+                      tabIndex={0}
+                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 ${getStatusBadge(payment.status)}`}
+                      aria-label={`${payment.status}: ${getPaymentStatusTooltip(payment.status)}`}
+                    >
+                      {payment.status}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">
+                    {getPaymentStatusTooltip(payment.status)}
+                  </TooltipContent>
+                </Tooltip>
                 <span
                   className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${getReconciliationBadge(payment.reconciliationStatus)}`}
                 >
@@ -339,7 +357,7 @@ export function PaymentDetailDrawer({
                 </p>
                 {(() => {
                   const href =
-                    payment.explorerUrl ??
+                    getSafeExternalUrl(payment.explorerUrl) ??
                     explorerLink('tx', payment.transactionHash);
                   return href ? (
                     <a
@@ -524,5 +542,6 @@ export function PaymentDetailDrawer({
         </div>
       </div>
     </div>
+    </TooltipProvider>
   );
 }

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getSafeExternalUrl } from '@/lib/destinationSafety';
 
 export type TxStage = 'BUILT' | 'SIMULATING' | 'SIGNING' | 'SUBMITTING' | 'CONFIRMED' | 'FAILED';
 
@@ -33,9 +34,15 @@ export const TxTrackerDrawer: React.FC<TxTrackerDrawerProps> = ({
     const currentIdx = stageOrder.indexOf(currentStage);
     const isFailed = currentStage === 'FAILED';
 
-    const explorerUrl = txHash 
-        ? `https://stellar.expert/explorer/${network.toLowerCase()}/tx/${txHash}`
-        : '#';
+    const normalizedNetwork = network.toLowerCase();
+    const explorerUrl =
+        txHash &&
+        /^[0-9a-fA-F]{64}$/.test(txHash) &&
+        /^[a-z0-9-]+$/.test(normalizedNetwork)
+            ? getSafeExternalUrl(
+                  `https://stellar.expert/explorer/${normalizedNetwork}/tx/${txHash}`
+              )
+            : null;
 
     const truncateHash = (hash: string) => `${hash.slice(0, 8)}...${hash.slice(-8)}`;
 
@@ -103,15 +110,20 @@ export const TxTrackerDrawer: React.FC<TxTrackerDrawerProps> = ({
             {txHash && (
                 <div className="bg-slate-800/50 border border-slate-800 rounded-xl p-4 mb-6">
                     <span className="text-xs text-slate-400 block mb-1">Transaction Hash</span>
-                    <a
-                        href={explorerUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="font-mono text-xs text-indigo-400 hover:underline flex items-center space-x-1"
-                    >
+                    <span className="font-mono text-xs text-indigo-400 flex items-center space-x-1">
                         <span>{truncateHash(txHash)}</span>
-                        <span>↗</span>
-                    </a>
+                        {explorerUrl && (
+                            <a
+                                href={explorerUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                aria-label="Open transaction in explorer"
+                                className="hover:underline"
+                            >
+                                ↗
+                            </a>
+                        )}
+                    </span>
                 </div>
             )}
           </div>
