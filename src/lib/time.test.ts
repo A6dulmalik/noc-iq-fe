@@ -99,3 +99,38 @@ describe('time formatting (#973)', () => {
     });
   });
 });
+
+describe('formatTimestampWithTimeZone (#897)', () => {
+  it('appends the resolved timezone abbreviation to timestamps', async () => {
+    const { formatTimestampWithTimeZone } = await import('./time');
+    expect(
+      formatTimestampWithTimeZone('2026-10-19T20:15:00.000Z', {
+        locale: 'en-US',
+        timeZone: 'UTC',
+      })
+    ).toBe('10/19/2026, 8:15:00 PM UTC');
+  });
+
+  it('uses timezone abbreviations that reflect daylight-saving transitions', async () => {
+    const { formatTimestampWithTimeZone } = await import('./time');
+    const winter = formatTimestampWithTimeZone('2026-01-15T12:00:00.000Z', {
+      locale: 'en-US',
+      timeZone: 'America/New_York',
+    });
+    const summer = formatTimestampWithTimeZone('2026-07-15T12:00:00.000Z', {
+      locale: 'en-US',
+      timeZone: 'America/New_York',
+    });
+
+    expect(winter).toContain('EST');
+    expect(summer).toContain('EDT');
+    expect(winter).not.toBe(summer);
+  });
+
+  it('falls back for invalid timestamps', async () => {
+    const { formatTimestampWithTimeZone, INVALID_TIME_PLACEHOLDER } = await import(
+      './time'
+    );
+    expect(formatTimestampWithTimeZone('nope')).toBe(INVALID_TIME_PLACEHOLDER);
+  });
+});
