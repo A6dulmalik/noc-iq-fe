@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { WifiOff } from 'lucide-react';
 import {
@@ -16,6 +16,8 @@ import { deleteOutage, resolveOutage } from '@/services/outages';
 import { RowActions } from '@/components/tables/RowActions';
 import { SeverityBadge } from '@/components/shared/SeverityBadgeAndShortcuts';
 import SeverityLegend from '@/components/outages/SeverityLegend';
+import { TableStatusPill } from '@/components/outages/TableStatusPill';
+import { useAutoRefresh } from '@/hooks/useAutoRefresh';
 import type {
   Outage as OutageRecord,
   OutageStatus,
@@ -94,6 +96,11 @@ export default function OutagesPageClient({
     () => data.filter((item) => !removedIds.includes(item.id)),
     [data, removedIds]
   );
+  // A CTA belongs in the true no-data state, not in a filtered-away result.
+  const hasActiveFilters = Boolean(
+    search || severity || dateFrom || dateTo || sort !== FILTER_DEFAULTS.sort
+  );
+  const isEmptyDataset = rows.length === 0 && !hasActiveFilters;
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -482,7 +489,12 @@ export default function OutagesPageClient({
                       label: 'Clear Search',
                       onClick: () => setFilters({ search: '' }),
                     }
-                  : undefined
+                  : isEmptyDataset
+                    ? {
+                        label: 'Log an outage',
+                        onClick: () => router.push('/outages/new'),
+                      }
+                    : undefined
               }
             />
           )}
